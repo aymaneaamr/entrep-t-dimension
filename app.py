@@ -1,5 +1,9 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.patches import Rectangle, FancyBboxPatch
+import numpy as np
 
 st.set_page_config(
     page_title="Warehouse Optimizer",
@@ -168,6 +172,290 @@ if st.button("🚀 Calculer la configuration", type="primary"):
             ]
         }
         st.dataframe(pd.DataFrame(capacite_data), hide_index=True, use_container_width=True)
+    
+    # Visualisation de la configuration
+    st.divider()
+    st.subheader("🎨 Visualisation de la configuration")
+    
+    # Créer deux vues : plan et vue 3D simplifiée
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 📐 Vue de dessus (Plan)")
+        
+        # Créer la figure pour la vue de dessus
+        fig_plan, ax_plan = plt.subplots(figsize=(10, 8))
+        
+        # Dessiner le contour de l'entrepôt
+        warehouse_rect = Rectangle((0, 0), longueur, largeur, 
+                                   linewidth=3, edgecolor='darkblue', 
+                                   facecolor='lightgray', alpha=0.3, 
+                                   label='Entrepôt')
+        ax_plan.add_patch(warehouse_rect)
+        
+        # Calculer l'espacement entre les racks
+        espace_lat = espacement_lateral / 100
+        
+        # Dessiner les racks avec allées
+        rack_color = 'orange'
+        allee_color = 'white'
+        
+        x_offset = (longueur - (racks_longueur * rack_longueur + (racks_longueur - 1) * espace_lat)) / 2
+        y_offset = allee / 2
+        
+        for i in range(racks_longueur):
+            for j in range(racks_largeur):
+                x = x_offset + i * (rack_longueur + espace_lat)
+                y = y_offset + j * (rack_largeur + allee)
+                
+                rack = FancyBboxPatch((x, y), rack_longueur, rack_largeur,
+                                     boxstyle="round,pad=0.05", 
+                                     linewidth=1.5, 
+                                     edgecolor='darkred', 
+                                     facecolor=rack_color, 
+                                     alpha=0.7)
+                ax_plan.add_patch(rack)
+                
+                # Ajouter le nombre de palettes sur le rack
+                if nb_racks <= 50:  # Afficher seulement si pas trop de racks
+                    ax_plan.text(x + rack_longueur/2, y + rack_largeur/2, 
+                               f'{capacite_par_rack}p',
+                               ha='center', va='center', 
+                               fontsize=8, fontweight='bold',
+                               color='white')
+        
+        # Dessiner les allées principales
+        for j in range(racks_largeur + 1):
+            y_allee = y_offset + j * (rack_largeur + allee) - allee/2
+            if j == 0:
+                y_allee = 0
+            if j == racks_largeur:
+                y_allee = y_offset + j * (rack_largeur + allee) - allee
+            
+            allee_rect = Rectangle((0, y_allee), longueur, 
+                                   allee if j != 0 and j != racks_largeur else allee/2,
+                                   linewidth=0, 
+                                   facecolor='lightblue', 
+                                   alpha=0.3)
+            if j > 0 and j < racks_largeur:
+                ax_plan.add_patch(allee_rect)
+        
+        # Annotations
+        ax_plan.text(longueur/2, -1.5, f'Longueur: {longueur}m', 
+                    ha='center', fontsize=10, fontweight='bold')
+        ax_plan.text(-1.5, largeur/2, f'Largeur: {largeur}m', 
+                    ha='center', va='center', rotation=90, 
+                    fontsize=10, fontweight='bold')
+        
+        # Légende
+        legend_elements = [
+            patches.Patch(facecolor='lightgray', edgecolor='darkblue', 
+                         label=f'Entrepôt ({surface:.0f}m²)', alpha=0.3),
+            patches.Patch(facecolor=rack_color, edgecolor='darkred', 
+                         label=f'Racks ({nb_racks} unités)', alpha=0.7),
+            patches.Patch(facecolor='lightblue', 
+                         label=f'Allées ({allee}m)', alpha=0.3)
+        ]
+        ax_plan.legend(handles=legend_elements, loc='upper right', fontsize=9)
+        
+        ax_plan.set_xlim(-2, longueur + 2)
+        ax_plan.set_ylim(-2, largeur + 2)
+        ax_plan.set_aspect('equal')
+        ax_plan.grid(True, alpha=0.3, linestyle='--')
+        ax_plan.set_xlabel('Longueur (m)', fontsize=10)
+        ax_plan.set_ylabel('Largeur (m)', fontsize=10)
+        ax_plan.set_title(f'Configuration: {racks_longueur}×{racks_largeur} racks | Utilisation: {taux_utilisation:.1f}%', 
+                         fontsize=11, fontweight='bold')
+        
+        st.pyplot(fig_plan)
+    
+    with col2:
+        st.markdown("#### 📊 Vue latérale (Élévation)")
+        
+        # Créer la figure pour la vue latérale
+        fig_elevation, ax_elev = plt.subplots(figsize=(10, 8))
+        
+        # Dessiner le bâtiment
+        building = Rectangle((0, 0), longueur, hauteur,
+                            linewidth=3, edgecolor='darkblue',
+                            facecolor='lightgray', alpha=0.2,
+                            label='Bâtiment')
+        ax_elev.add_patch(building)
+        
+        # Dessiner quelques racks en vue latérale (max 5 pour la lisibilité)
+        racks_to_show = min(5, racks_longueur)
+        rack_spacing = longueur / (racks_to_show + 1)
+        
+        for i in range(racks_to_show):
+            x_rack = rack_spacing * (i + 1) - rack_longueur/2
+            
+            # Dessiner le rack complet
+            rack_elevation = Rectangle((x_rack, 0), rack_longueur, hauteur_totale_rack,
+                                      linewidth=2, edgecolor='darkred',
+                                      facecolor='orange', alpha=0.6)
+            ax_elev.add_patch(rack_elevation)
+            
+            # Dessiner les niveaux
+            for niveau in range(etages):
+                y_niveau = niveau * (hauteur_etage + espacement_vertical/100)
+                
+                # Ligne de niveau
+                ax_elev.plot([x_rack, x_rack + rack_longueur], 
+                           [y_niveau, y_niveau], 
+                           'r-', linewidth=1, alpha=0.8)
+                
+                # Dessiner les palettes sur ce niveau
+                palette_width = rack_longueur / (palettes_longueur * 1.2)
+                palette_height = hauteur_etage * 0.7
+                
+                for p in range(palettes_longueur):
+                    x_palette = x_rack + (rack_longueur / (palettes_longueur + 1)) * (p + 1) - palette_width/2
+                    y_palette = y_niveau + 0.1
+                    
+                    palette = Rectangle((x_palette, y_palette), 
+                                      palette_width, palette_height,
+                                      linewidth=1, edgecolor='brown',
+                                      facecolor='wheat', alpha=0.9)
+                    ax_elev.add_patch(palette)
+        
+        # Ligne du sol
+        ax_elev.plot([0, longueur], [0, 0], 'k-', linewidth=3, label='Sol')
+        
+        # Ligne de hauteur maximale rack
+        ax_elev.plot([0, longueur], [hauteur_totale_rack, hauteur_totale_rack], 
+                    'r--', linewidth=2, label=f'Hauteur rack: {hauteur_totale_rack:.2f}m')
+        
+        # Ligne de hauteur entrepôt
+        ax_elev.plot([0, longueur], [hauteur, hauteur], 
+                    'b--', linewidth=2, label=f'Hauteur entrepôt: {hauteur}m')
+        
+        # Annotations pour les dimensions
+        # Hauteur rack
+        ax_elev.annotate('', xy=(longueur + 1, 0), xytext=(longueur + 1, hauteur_totale_rack),
+                        arrowprops=dict(arrowstyle='<->', color='red', lw=2))
+        ax_elev.text(longueur + 1.5, hauteur_totale_rack/2, 
+                    f'{hauteur_totale_rack:.2f}m\n({etages} étages)',
+                    va='center', fontsize=9, fontweight='bold', color='red')
+        
+        # Marge de sécurité
+        if conforme_hauteur:
+            marge = hauteur - hauteur_totale_rack
+            ax_elev.annotate('', xy=(longueur + 1, hauteur_totale_rack), 
+                           xytext=(longueur + 1, hauteur),
+                           arrowprops=dict(arrowstyle='<->', color='green', lw=1.5))
+            ax_elev.text(longueur + 1.5, hauteur_totale_rack + marge/2, 
+                        f'Marge\n{marge:.2f}m',
+                        va='center', fontsize=8, color='green')
+        
+        # Hauteur d'un étage
+        if etages > 0:
+            ax_elev.annotate('', xy=(x_rack - 0.5, 0), 
+                           xytext=(x_rack - 0.5, hauteur_etage),
+                           arrowprops=dict(arrowstyle='<->', color='orange', lw=1.5))
+            ax_elev.text(x_rack - 1.2, hauteur_etage/2, 
+                        f'{hauteur_etage}m',
+                        va='center', ha='right', fontsize=8, color='orange')
+        
+        ax_elev.set_xlim(-2, longueur + 4)
+        ax_elev.set_ylim(-0.5, hauteur + 1)
+        ax_elev.grid(True, alpha=0.3, linestyle='--')
+        ax_elev.set_xlabel('Longueur (m)', fontsize=10)
+        ax_elev.set_ylabel('Hauteur (m)', fontsize=10)
+        ax_elev.set_title(f'Élévation: {etages} étages × {hauteur_etage}m = {hauteur_totale_rack:.2f}m', 
+                         fontsize=11, fontweight='bold')
+        ax_elev.legend(loc='upper left', fontsize=9)
+        
+        st.pyplot(fig_elevation)
+    
+    # Vue 3D simplifiée (isométrique)
+    st.markdown("#### 🏗️ Vue isométrique")
+    
+    fig_iso, ax_iso = plt.subplots(figsize=(12, 8))
+    
+    # Fonction pour dessiner un cube en perspective isométrique
+    def draw_isometric_box(ax, x, y, z, width, depth, height, color, alpha=0.7, edge_color='black'):
+        # Facteurs de projection isométrique
+        iso_x = lambda x, y: x - y * 0.5
+        iso_y = lambda x, y, z: x * 0.25 + y * 0.25 + z
+        
+        # Points du cube
+        vertices = [
+            [x, y, z],
+            [x + width, y, z],
+            [x + width, y + depth, z],
+            [x, y + depth, z],
+            [x, y, z + height],
+            [x + width, y, z + height],
+            [x + width, y + depth, z + height],
+            [x, y + depth, z + height]
+        ]
+        
+        # Convertir en coordonnées isométriques
+        iso_vertices = [[iso_x(v[0], v[1]), iso_y(v[0], v[1], v[2])] for v in vertices]
+        
+        # Faces visibles (top, front, right)
+        faces = [
+            [iso_vertices[4], iso_vertices[5], iso_vertices[6], iso_vertices[7]],  # Top
+            [iso_vertices[0], iso_vertices[1], iso_vertices[5], iso_vertices[4]],  # Front
+            [iso_vertices[1], iso_vertices[2], iso_vertices[6], iso_vertices[5]]   # Right
+        ]
+        
+        colors_shade = [color, color, color]
+        alphas = [alpha, alpha * 0.8, alpha * 0.6]
+        
+        for face, fc, a in zip(faces, colors_shade, alphas):
+            poly = plt.Polygon(face, facecolor=fc, edgecolor=edge_color, 
+                             linewidth=0.5, alpha=a)
+            ax.add_patch(poly)
+    
+    # Dessiner l'entrepôt
+    draw_isometric_box(ax_iso, 0, 0, 0, longueur, largeur, hauteur, 
+                      'lightblue', alpha=0.15, edge_color='darkblue')
+    
+    # Dessiner un échantillon de racks (limité pour la lisibilité)
+    sample_racks_x = min(4, racks_longueur)
+    sample_racks_y = min(3, racks_largeur)
+    
+    for i in range(sample_racks_x):
+        for j in range(sample_racks_y):
+            x_pos = x_offset + i * (rack_longueur + espace_lat)
+            y_pos = y_offset + j * (rack_largeur + allee)
+            
+            draw_isometric_box(ax_iso, x_pos, y_pos, 0, 
+                             rack_longueur, rack_largeur, hauteur_totale_rack,
+                             'orange', alpha=0.8, edge_color='darkred')
+    
+    # Ajouter des annotations
+    iso_x = lambda x, y: x - y * 0.5
+    iso_y = lambda x, y, z: x * 0.25 + y * 0.25 + z
+    
+    # Texte informatif
+    ax_iso.text(iso_x(longueur/2, 0), iso_y(longueur/2, 0, hauteur + 2),
+               f'{nb_racks} racks | {capacite_totale:,} palettes'.replace(',', ' '),
+               ha='center', fontsize=12, fontweight='bold',
+               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    ax_iso.set_xlim(-5, longueur + 5)
+    ax_iso.set_ylim(-5, hauteur + largeur * 0.5 + 5)
+    ax_iso.set_aspect('equal')
+    ax_iso.axis('off')
+    ax_iso.set_title('Vue 3D isométrique de l\'entrepôt', 
+                    fontsize=13, fontweight='bold', pad=20)
+    
+    # Légende
+    legend_text = f"""Configuration:
+• {racks_longueur} × {racks_largeur} = {nb_racks} racks
+• {etages} étages par rack
+• Hauteur totale: {hauteur_totale_rack:.2f}m
+• Capacité: {capacite_totale:,} palettes""".replace(',', ' ')
+    
+    ax_iso.text(0.02, 0.98, legend_text,
+               transform=ax_iso.transAxes,
+               fontsize=10,
+               verticalalignment='top',
+               bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    
+    st.pyplot(fig_iso)
     
     # Tableau récapitulatif général
     st.divider()
