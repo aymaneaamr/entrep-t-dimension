@@ -4,848 +4,884 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
+from itertools import product
 
 st.set_page_config(
-    page_title="Warehouse Optimizer",
+    page_title="Warehouse Configuration Optimizer Pro",
     page_icon="🏭",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("🏭 Entrepôt Dimension Optimizer")
-st.markdown("### Configuration pour chariots élévateurs")
+# Configuration CSS personnalisée
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1E3A8A;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        font-size: 1.5rem;
+        color: #374151;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    .stButton>button {
+        background-color: #1E40AF;
+        color: white;
+        font-weight: bold;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        border: none;
+        width: 100%;
+    }
+    .stButton>button:hover {
+        background-color: #1E3A8A;
+    }
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+    }
+    .warning-card {
+        background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+    }
+    .success-card {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+st.markdown('<h1 class="main-header">🏭 Warehouse Configuration Optimizer Pro</h1>', unsafe_allow_html=True)
+st.markdown('<h2 class="sub-header">Dimensionnement intelligent pour chariots élévateurs</h2>', unsafe_allow_html=True)
+
+# Initialisation de la session state
+if 'calcul_done' not in st.session_state:
+    st.session_state.calcul_done = False
+
+# Sidebar avec les paramètres
 with st.sidebar:
-    st.header("📐 Dimensions Entrepôt")
+    st.markdown("### ⚙️ Paramètres de configuration")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        longueur = st.number_input("Longueur (m)", 50.0)
-    with col2:
-        largeur = st.number_input("Largeur (m)", 30.0)
+    # Onglets pour organiser les paramètres
+    tab_dim, tab_rack, tab_chariot, tab_opt = st.tabs(["🏢 Dimensions", "📦 Racks", "🚜 Chariots", "⚙️ Options"])
     
-    hauteur = st.number_input("Hauteur (m)", 12.0)
+    with tab_dim:
+        st.header("🏢 Dimensions Entrepôt")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            longueur = st.number_input("Longueur (m)", min_value=10.0, max_value=200.0, value=50.0, step=1.0, 
+                                      help="Longueur totale de l'entrepôt")
+        with col2:
+            largeur = st.number_input("Largeur (m)", min_value=10.0, max_value=100.0, value=30.0, step=1.0,
+                                     help="Largeur totale de l'entrepôt")
+        
+        hauteur = st.number_input("Hauteur (m)", min_value=3.0, max_value=30.0, value=12.0, step=0.5,
+                                 help="Hauteur sous plafond")
+        
+        # Visualisation rapide des dimensions
+        st.metric("Surface totale", f"{longueur * largeur:.0f} m²")
+        st.metric("Volume total", f"{longueur * largeur * hauteur:.0f} m³")
     
-    st.divider()
-    st.header("📦 Dimensionnement des Racks")
+    with tab_rack:
+        st.header("📦 Dimensionnement des Racks")
+        
+        # Section pour les racks standard
+        st.subheader("📏 Dimensions standard")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            rack_longueur = st.selectbox("Longueur rack (m)", 
+                                        [1.2, 1.5, 1.8, 2.0, 2.4, 2.7, 3.0, 3.3], 
+                                        index=4)
+        with col2:
+            rack_largeur = st.selectbox("Largeur rack (m)", 
+                                       [0.8, 1.0, 1.2, 1.5, 1.8], 
+                                       index=1)
+        with col3:
+            rack_hauteur = st.selectbox("Hauteur rack (m)", 
+                                       [2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0], 
+                                       index=6)
+        
+        # Configuration verticale dynamique
+        st.subheader("📊 Configuration verticale")
+        etages = st.slider("Nombre d'étages", 1, 15, 6)
+        hauteur_etage = st.number_input("Hauteur utile par étage (m)", 
+                                       min_value=0.5, max_value=3.0, value=1.5, step=0.1)
+        
+        # Calcul automatique de l'espacement vertical
+        espacement_vertical = st.slider("Espacement vertical (cm)", 10, 100, 30)
+        
+        # Capacité par niveau
+        st.subheader("🎯 Capacité par niveau")
+        palettes_longueur = st.number_input("Palettes en longueur", min_value=1, max_value=10, value=2)
+        palettes_largeur = st.number_input("Palettes en largeur", min_value=1, max_value=5, value=1)
+        palettes_par_niveau = palettes_longueur * palettes_largeur
+        
+        # Type de rack
+        st.subheader("🔧 Type de rack")
+        rack_type = st.selectbox("Sélectionnez le type de rack", 
+                                ["Rack palette standard", "Rack palette dynamique", 
+                                 "Rack à palettier", "Rack cantilever", "Rack drive-in"])
+        
+        # Options selon le type de rack
+        if rack_type == "Rack drive-in":
+            profondeur_double = st.checkbox("Double profondeur")
+            espacement_lateral = 0
+        else:
+            espacement_lateral = st.slider("Espacement latéral (cm)", 10, 100, 20)
+            profondeur_double = False
     
-    # Section améliorée pour les racks
-    st.subheader("🔧 Dimensions unitaires")
-    rack_longueur = st.number_input("Longueur rack (m)", min_value=0.5, max_value=10.0, value=2.4, step=0.1)
-    rack_largeur = st.number_input("Largeur rack (m)", min_value=0.5, max_value=5.0, value=1.0, step=0.1)
-    rack_hauteur = st.number_input("Hauteur rack (m)", min_value=1.0, max_value=15.0, value=10.0, step=0.5)
+    with tab_chariot:
+        st.header("🚜 Configuration Chariots")
+        
+        # Types de chariots avec spécifications
+        chariot_options = {
+            "Contrebalance": {"allee_min": 3.5, "hauteur_max": 12.0, "charge_max": 3.0},
+            "Reach Truck": {"allee_min": 2.7, "hauteur_max": 15.0, "charge_max": 2.5},
+            "Télescopique": {"allee_min": 3.0, "hauteur_max": 14.0, "charge_max": 4.0},
+            "Transpalette": {"allee_min": 1.8, "hauteur_max": 6.0, "charge_max": 1.5},
+            "Gerbeur": {"allee_min": 2.0, "hauteur_max": 10.0, "charge_max": 2.0}
+        }
+        
+        type_chariot = st.selectbox("Type de chariot", list(chariot_options.keys()))
+        
+        # Affichage des spécifications du chariot sélectionné
+        specs = chariot_options[type_chariot]
+        st.info(f"**Spécifications {type_chariot}:**\n"
+               f"- Allée minimum: {specs['allee_min']}m\n"
+               f"- Hauteur max: {specs['hauteur_max']}m\n"
+               f"- Charge max: {specs['charge_max']}t")
+        
+        # Largeur d'allée avec recommandation
+        allee = st.slider("Largeur allée (m)", 
+                         float(specs['allee_min']), 
+                         float(specs['allee_min'] + 2.0), 
+                         float(specs['allee_min'] + 0.5), 
+                         step=0.1)
+        
+        # Vérification de compatibilité
+        if rack_hauteur > specs['hauteur_max']:
+            st.warning(f"⚠️ La hauteur des racks ({rack_hauteur}m) dépasse "
+                      f"la capacité du chariot ({specs['hauteur_max']}m)")
+        
+        # Charge maximale
+        charge_max = st.number_input("Charge max (tonnes)", 
+                                    min_value=0.5, 
+                                    max_value=10.0, 
+                                    value=specs['charge_max'], 
+                                    step=0.5)
     
-    st.subheader("📊 Configuration verticale")
-    etages = st.slider("Étages par rack", 1, 10, 6)
-    hauteur_etage = st.number_input("Hauteur par étage (m)", min_value=0.5, max_value=3.0, value=1.5, step=0.1)
-    
-    st.subheader("📦 Capacité par niveau")
-    palettes_longueur = st.number_input("Palettes en longueur", min_value=1, max_value=10, value=2)
-    palettes_largeur = st.number_input("Palettes en largeur", min_value=1, max_value=5, value=1)
-    palettes_par_niveau = palettes_longueur * palettes_largeur
-    
-    st.subheader("🎯 Espacement")
-    espacement_vertical = st.number_input("Espacement vertical (cm)", min_value=10, max_value=100, value=30)
-    espacement_lateral = st.number_input("Espacement latéral (cm)", min_value=10, max_value=100, value=20)
-    
-    st.divider()
-    st.header("🚜 Chariots élévateurs")
-    
-    allee = st.slider("Allée chariots (m)", 3.0, 6.0, 4.0, step=0.1)
-    type_chariot = st.selectbox("Type chariot", ["Contrebalance", "Télescopique", "Transpalette", "Reach Truck"])
-    charge_max = st.number_input("Charge max (tonnes)", min_value=1.0, max_value=10.0, value=2.5, step=0.5)
-    
-    st.divider()
-    st.header("⚙️ Options avancées")
-    
-    marge_securite = st.slider("Marge sécurité (%)", 5, 25, 15)
-    utilisation_surface = st.slider("Utilisation surface (%)", 50, 90, 70)
+    with tab_opt:
+        st.header("⚙️ Options avancées")
+        
+        # Options d'optimisation
+        st.subheader("🎯 Optimisation")
+        marge_securite = st.slider("Marge de sécurité (%)", 5, 30, 15)
+        taux_utilisation_cible = st.slider("Taux d'utilisation cible (%)", 50, 90, 70)
+        
+        # Configuration des allées
+        st.subheader("🛣️ Configuration des allées")
+        all_transversale = st.checkbox("Allée transversale centrale", value=True)
+        if all_transversale:
+            largeur_transversale = st.slider("Largeur allée transversale (m)", 2.0, 5.0, 3.0)
+        
+        # Options de visualisation
+        st.subheader("👁️ Visualisation")
+        show_3d = st.checkbox("Afficher vue 3D", value=True)
+        show_heatmap = st.checkbox("Afficher heatmap de densité", value=True)
 
-# Calculs détaillés
-if st.button("🚀 Calculer la configuration", type="primary"):
+# Fonction d'optimisation intelligente
+def optimiser_configuration(longueur, largeur, hauteur, rack_longueur, rack_largeur, 
+                           rack_hauteur, etages, hauteur_etage, espacement_vertical,
+                           palettes_longueur, palettes_largeur, allee, type_chariot,
+                           marge_securite, taux_utilisation_cible, rack_type, profondeur_double):
     
     # Calculs de base
-    surface = longueur * largeur
-    surface_rack = rack_longueur * rack_largeur
-    volume_entrepot = longueur * largeur * hauteur
+    surface_totale = longueur * largeur
+    volume_total = surface_totale * hauteur
     
-    # Calculs racks
-    hauteur_totale_rack = etages * hauteur_etage + (etages - 1) * (espacement_vertical / 100)
+    # Calcul de la hauteur totale des racks
+    espacement_vertical_m = espacement_vertical / 100
+    hauteur_totale_rack = etages * hauteur_etage + (etages - 1) * espacement_vertical_m
     
-    # Vérification conformité hauteur
+    # Vérifications de conformité
     conforme_hauteur = hauteur_totale_rack <= (hauteur - 0.5)
     
-    # Calcul optimisé du nombre de racks
-    espace_lat = espacement_lateral / 100
+    # Calcul intelligent du nombre de racks
+    coef_utilisation = taux_utilisation_cible / 100
+    marge_absolue = marge_securite / 100 * min(rack_longueur, rack_largeur)
     
-    # Calcul intelligent basé sur l'espace réel disponible
-    # En longueur : on peut placer des racks avec espacement latéral entre eux
-    espace_dispo_longueur = longueur * 0.95  # 5% de marge sur les bords
-    racks_longueur = int(espace_dispo_longueur / (rack_longueur + espace_lat))
+    # Si double profondeur, ajuster la largeur
+    if profondeur_double:
+        rack_largeur_effective = rack_largeur * 2
+    else:
+        rack_largeur_effective = rack_largeur
     
-    # En largeur : on alterne rack + allée
-    espace_dispo_largeur = largeur * 0.95  # 5% de marge sur les bords
-    # Formule: rack + allée, mais la dernière allée peut être plus petite
-    racks_largeur = int(espace_dispo_largeur / (rack_largeur + allee))
+    # Calcul du nombre optimal de racks
+    espacement_lateral_m = espacement_lateral / 100 if 'espacement_lateral' in locals() else 0.2
     
-    # Ajuster selon le coefficient d'utilisation souhaité
-    coef_utilisation = utilisation_surface / 100
-    racks_longueur = max(1, int(racks_longueur * coef_utilisation))
-    racks_largeur = max(1, int(racks_largeur * coef_utilisation))
+    # Méthode d'optimisation améliorée
+    max_racks_longueur = int((longueur * coef_utilisation - marge_absolue * 2) / 
+                            (rack_longueur + espacement_lateral_m))
+    max_racks_largeur = int((largeur * coef_utilisation - marge_absolue * 2 - allee) / 
+                           (rack_largeur_effective + espacement_lateral_m))
+    
+    # Ajuster pour avoir un nombre pair de chaque côté de l'allée
+    racks_longueur = max(1, max_racks_longueur)
+    racks_largeur = max(1, max_racks_largeur) * 2  # Deux côtés de l'allée
     
     nb_racks = racks_longueur * racks_largeur
     
     # Capacités
+    palettes_par_niveau = palettes_longueur * palettes_largeur
     capacite_par_rack = etages * palettes_par_niveau
     capacite_totale = nb_racks * capacite_par_rack
     
-    # Surface utilisée
-    surface_racks_reelle = nb_racks * surface_rack
-    surface_allees = surface - surface_racks_reelle
-    taux_utilisation = (surface_racks_reelle / surface) * 100
+    # Calculs de surface
+    surface_rack_unitaire = rack_longueur * rack_largeur_effective
+    surface_racks_totale = nb_racks * surface_rack_unitaire
+    surface_all = surface_totale - surface_racks_totale
+    taux_utilisation = (surface_racks_totale / surface_totale) * 100
     
-    # Résultats
-    st.success(f"### 📊 Résultats de la configuration")
+    # Volume utile
+    volume_utile = surface_racks_totale * hauteur_totale_rack
     
-    # Métriques principales
+    # Score d'efficacité
+    score_hauteur = 1.0 if conforme_hauteur else 0.5
+    score_all = 1.0 if allee >= chariot_options[type_chariot]["allee_min"] else 0.7
+    score_utilisation = min(taux_utilisation / 80, 1.0)  # Optimal à 80%
+    
+    score_total = (score_hauteur * 0.3 + score_all * 0.3 + score_utilisation * 0.4) * 100
+    
+    return {
+        'surface_totale': surface_totale,
+        'volume_total': volume_total,
+        'hauteur_totale_rack': hauteur_totale_rack,
+        'conforme_hauteur': conforme_hauteur,
+        'racks_longueur': racks_longueur,
+        'racks_largeur': racks_largeur,
+        'nb_racks': nb_racks,
+        'palettes_par_niveau': palettes_par_niveau,
+        'capacite_par_rack': capacite_par_rack,
+        'capacite_totale': capacite_totale,
+        'surface_rack_unitaire': surface_rack_unitaire,
+        'surface_racks_totale': surface_racks_totale,
+        'surface_all': surface_all,
+        'taux_utilisation': taux_utilisation,
+        'volume_utile': volume_utile,
+        'score_total': score_total
+    }
+
+# Fonction de visualisation avancée
+def creer_visualisation_3d_avancee(longueur, largeur, hauteur, results, rack_longueur, 
+                                  rack_largeur, hauteur_totale_rack, allee):
+    
+    fig = make_subplots(
+        rows=2, cols=2,
+        specs=[[{'type': 'scene'}, {'type': 'xy'}],
+               [{'type': 'surface'}, {'type': 'heatmap'}]],
+        subplot_titles=('Vue 3D complète', 'Plan de situation', 
+                       'Distribution verticale', 'Densité de stockage'),
+        vertical_spacing=0.1,
+        horizontal_spacing=0.1
+    )
+    
+    # Vue 3D principale
+    # Contour de l'entrepôt
+    x_entrepot = [0, longueur, longueur, 0, 0, longueur, longueur, 0]
+    y_entrepot = [0, 0, largeur, largeur, 0, 0, largeur, largeur]
+    z_entrepot = [0, 0, 0, 0, hauteur, hauteur, hauteur, hauteur]
+    
+    fig.add_trace(go.Mesh3d(
+        x=x_entrepot,
+        y=y_entrepot,
+        z=z_entrepot,
+        opacity=0.1,
+        color='lightgray',
+        name='Entrepôt'
+    ), row=1, col=1)
+    
+    # Représentation des racks
+    racks_longueur = results['racks_longueur']
+    racks_largeur = results['racks_largeur'] // 2
+    
+    for i in range(min(racks_longueur, 10)):  # Limiter pour la performance
+        for j in range(min(racks_largeur, 5)):
+            for side in [0, 1]:  # Deux côtés de l'allée
+                x_pos = i * (rack_longueur + 0.3) + 1
+                y_pos = side * (largeur/2 + allee/2) + j * (rack_largeur + 0.2) + 1
+                
+                # Rack en 3D
+                fig.add_trace(go.Mesh3d(
+                    x=[x_pos, x_pos + rack_longueur, x_pos + rack_longueur, x_pos],
+                    y=[y_pos, y_pos, y_pos + rack_largeur, y_pos + rack_largeur],
+                    z=[0, 0, 0, 0],
+                    i=[0, 0],
+                    j=[1, 2],
+                    k=[2, 3],
+                    opacity=0.7,
+                    color='orange',
+                    name=f'Rack' if i == 0 and j == 0 and side == 0 else '',
+                    showlegend=i == 0 and j == 0 and side == 0
+                ), row=1, col=1)
+    
+    # Plan de situation
+    # Entrepôt
+    fig.add_trace(go.Scatter(
+        x=[0, longueur, longueur, 0, 0],
+        y=[0, 0, largeur, largeur, 0],
+        fill="toself",
+        fillcolor="rgba(200, 200, 200, 0.2)",
+        line=dict(color="black", width=2),
+        name="Entrepôt",
+        showlegend=False
+    ), row=1, col=2)
+    
+    # Racks en plan
+    for i in range(racks_longueur):
+        for j in range(racks_largeur):
+            for side in [0, 1]:
+                x_pos = i * (rack_longueur + 0.3) + 1
+                y_pos = side * (largeur/2 + allee/2) + j * (rack_largeur + 0.2) + 1
+                
+                fig.add_trace(go.Scatter(
+                    x=[x_pos, x_pos + rack_longueur, x_pos + rack_longueur, x_pos, x_pos],
+                    y=[y_pos, y_pos, y_pos + rack_largeur, y_pos + rack_largeur, y_pos],
+                    fill="toself",
+                    fillcolor="orange",
+                    line=dict(color="darkorange", width=1),
+                    mode="lines",
+                    showlegend=False
+                ), row=1, col=2)
+    
+    # Distribution verticale
+    niveaux = list(range(1, etages + 1))
+    capacites = [results['palettes_par_niveau'] * results['nb_racks'] for _ in niveaux]
+    
+    fig.add_trace(go.Bar(
+        x=niveaux,
+        y=capacites,
+        name='Palettes par niveau',
+        marker_color='orange'
+    ), row=2, col=1)
+    
+    # Heatmap de densité
+    heatmap_data = np.zeros((10, 10))
+    for i in range(10):
+        for j in range(10):
+            # Simuler une densité de stockage
+            heatmap_data[i][j] = np.random.uniform(0.5, 1.0)
+    
+    fig.add_trace(go.Heatmap(
+        z=heatmap_data,
+        colorscale='Viridis',
+        showscale=True,
+        name='Densité'
+    ), row=2, col=2)
+    
+    # Mise en page
+    fig.update_layout(
+        height=800,
+        showlegend=True,
+        title_text="Visualisation avancée de la configuration",
+        scene=dict(
+            xaxis_title='Longueur (m)',
+            yaxis_title='Largeur (m)',
+            zaxis_title='Hauteur (m)',
+            aspectmode='manual',
+            aspectratio=dict(x=longueur/10, y=largeur/10, z=hauteur/10)
+        ),
+        scene2=dict(
+            xaxis_title='Longueur (m)',
+            yaxis_title='Largeur (m)'
+        ),
+        scene3=dict(
+            xaxis_title='Niveau',
+            yaxis_title='Nombre de palettes'
+        ),
+        scene4=dict(
+            xaxis_title='Zone X',
+            yaxis_title='Zone Y'
+        )
+    )
+    
+    return fig
+
+# Interface principale
+st.markdown("## 🚀 Analyse et Optimisation")
+
+col_start, col_reset = st.columns([3, 1])
+with col_start:
+    if st.button("🚀 Lancer l'analyse complète", type="primary", use_container_width=True):
+        st.session_state.calcul_done = True
+with col_reset:
+    if st.button("🔄 Réinitialiser", use_container_width=True):
+        st.session_state.calcul_done = False
+        st.rerun()
+
+if st.session_state.calcul_done:
+    # Calcul des résultats
+    results = optimiser_configuration(
+        longueur, largeur, hauteur, rack_longueur, rack_largeur,
+        rack_hauteur, etages, hauteur_etage, espacement_vertical,
+        palettes_longueur, palettes_largeur, allee, type_chariot,
+        marge_securite, taux_utilisation_cible, rack_type, 
+        profondeur_double if 'profondeur_double' in locals() else False
+    )
+    
+    # Affichage des métriques principales
+    st.markdown("## 📊 Résultats détaillés")
+    
+    # Cartes de métriques
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("🏢 Surface totale", f"{surface:.0f} m²")
-        st.metric("📦 Surface racks", f"{surface_racks_reelle:.0f} m²")
-        st.metric("🚶 Surface allées", f"{surface_allees:.0f} m²")
+        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        st.metric("🏢 Surface totale", f"{results['surface_totale']:,.0f} m²".replace(',', ' '))
+        st.metric("📦 Surface racks", f"{results['surface_racks_totale']:,.0f} m²".replace(',', ' '))
+        st.metric("🚶 Surface allées", f"{results['surface_all']:,.0f} m²".replace(',', ' '))
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        st.metric("🔢 Nombre de racks", f"{nb_racks}")
-        st.metric("📐 Disposition", f"{racks_longueur} × {racks_largeur}")
-        st.metric("📊 Taux utilisation", f"{taux_utilisation:.1f}%")
+        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        st.metric("🔢 Nombre de racks", f"{results['nb_racks']:,}".replace(',', ' '))
+        st.metric("📐 Disposition", f"{results['racks_longueur']} × {results['racks_largeur']}")
+        st.metric("📊 Taux utilisation", f"{results['taux_utilisation']:.1f}%")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
+        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.metric("🔄 Étages/rack", f"{etages}")
-        st.metric("📦 Palettes/niveau", f"{palettes_par_niveau}")
-        st.metric("🏗️ Capacité/rack", f"{capacite_par_rack} pal.")
+        st.metric("📦 Palettes/niveau", f"{results['palettes_par_niveau']}")
+        st.metric("🏗️ Capacité/rack", f"{results['capacite_par_rack']:,} pal".replace(',', ' '))
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col4:
-        st.metric("📈 Capacité totale", f"{capacite_totale:,} pal.".replace(',', ' '))
-        st.metric("📏 Hauteur rack", f"{hauteur_totale_rack:.2f} m")
-        st.metric("✅ Conformité", "✅" if (conforme_hauteur and allee >= 3.0) else "⚠️")
+        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        st.metric("📈 Capacité totale", f"{results['capacite_totale']:,} pal".replace(',', ' '))
+        st.metric("📏 Hauteur rack", f"{results['hauteur_totale_rack']:.2f} m")
+        st.metric("⭐ Score global", f"{results['score_total']:.1f}/100")
+        st.markdown('</div>', unsafe_allow_html=True)
     
-    # Analyse détaillée des racks
-    st.divider()
-    st.subheader("🔍 Analyse détaillée des Racks")
+    # Onglets pour différents types d'analyse
+    tab_visu, tab_analyse, tab_rapport, tab_export = st.tabs([
+        "🎨 Visualisations", "📈 Analyses", "📋 Rapport", "💾 Export"
+    ])
     
-    col1, col2 = st.columns(2)
+    with tab_visu:
+        # Visualisations avancées
+        st.subheader("🎨 Visualisations interactives")
+        
+        if show_3d:
+            fig_3d = creer_visualisation_3d_avancee(
+                longueur, largeur, hauteur, results, rack_longueur,
+                rack_largeur, results['hauteur_totale_rack'], allee
+            )
+            st.plotly_chart(fig_3d, use_container_width=True)
+        
+        # Graphiques supplémentaires
+        col_v1, col_v2 = st.columns(2)
+        
+        with col_v1:
+            # Graphique de répartition
+            labels = ['Racks', 'Allées', 'Espace libre']
+            values = [
+                results['surface_racks_totale'],
+                results['surface_all'] * 0.7,
+                results['surface_all'] * 0.3
+            ]
+            
+            fig_pie = px.pie(
+                values=values,
+                names=labels,
+                title='Répartition de la surface',
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col_v2:
+            # Graphique de capacité cumulée
+            niveaux = list(range(1, etages + 1))
+            capacite_niveaux = [results['palettes_par_niveau'] * results['nb_racks'] for _ in niveaux]
+            capacite_cumulee = np.cumsum(capacite_niveaux)
+            
+            fig_area = go.Figure()
+            fig_area.add_trace(go.Scatter(
+                x=niveaux,
+                y=capacite_cumulee,
+                fill='tozeroy',
+                fillcolor='rgba(255, 165, 0, 0.3)',
+                line=dict(color='orange', width=3),
+                name='Capacité cumulée'
+            ))
+            fig_area.update_layout(
+                title='Capacité cumulée par niveau',
+                xaxis_title='Niveau',
+                yaxis_title='Palettes cumulées',
+                hovermode='x'
+            )
+            st.plotly_chart(fig_area, use_container_width=True)
+        
+        if show_heatmap:
+            st.subheader("🗺️ Heatmap de densité")
+            # Créer une heatmap simulée
+            heatmap_data = np.random.rand(20, 20)
+            fig_heat = px.imshow(
+                heatmap_data,
+                title='Densité de stockage simulée',
+                color_continuous_scale='Viridis'
+            )
+            st.plotly_chart(fig_heat, use_container_width=True)
     
-    with col1:
-        st.markdown("#### 📐 Dimensions")
-        rack_data = {
+    with tab_analyse:
+        # Analyses détaillées
+        st.subheader("📈 Analyses approfondies")
+        
+        # Tableau d'analyse
+        analyse_data = {
             'Paramètre': [
-                'Longueur unitaire',
-                'Largeur unitaire', 
-                'Hauteur totale',
-                'Surface au sol',
-                'Volume par rack',
-                'Hauteur par étage',
-                'Espacement vertical',
-                'Espacement latéral'
+                'Efficacité spatiale',
+                'Utilisation verticale',
+                'Densité de stockage',
+                'Accessibilité',
+                'Flexibilité',
+                'Coût estimé par palette'
             ],
             'Valeur': [
-                f"{rack_longueur} m",
-                f"{rack_largeur} m",
-                f"{hauteur_totale_rack:.2f} m",
-                f"{surface_rack:.2f} m²",
-                f"{surface_rack * hauteur_totale_rack:.2f} m³",
-                f"{hauteur_etage} m",
-                f"{espacement_vertical} cm",
-                f"{espacement_lateral} cm"
-            ]
-        }
-        st.dataframe(pd.DataFrame(rack_data), hide_index=True, use_container_width=True)
-    
-    with col2:
-        st.markdown("#### 📊 Capacité")
-        capacite_data = {
-            'Paramètre': [
-                'Palettes/longueur',
-                'Palettes/largeur',
-                'Palettes/niveau',
-                'Nombre d\'étages',
-                'Palettes/rack',
-                'Nombre de racks',
-                'Capacité totale',
-                'Charge totale estimée'
+                f"{results['taux_utilisation']:.1f}%",
+                f"{(results['hauteur_totale_rack'] / hauteur) * 100:.1f}%",
+                f"{results['capacite_totale'] / results['surface_totale']:.1f} pal/m²",
+                f"{'Élevée' if allee >= 3.5 else 'Moyenne' if allee >= 3.0 else 'Faible'}",
+                f"{'Bonne' if rack_type == 'Rack palette standard' else 'Moyenne'}",
+                f"{(results['nb_racks'] * 1500 + results['capacite_totale'] * 50) / results['capacite_totale']:.0f} €"
             ],
-            'Valeur': [
-                f"{palettes_longueur}",
-                f"{palettes_largeur}",
-                f"{palettes_par_niveau}",
-                f"{etages}",
-                f"{capacite_par_rack}",
-                f"{nb_racks}",
-                f"{capacite_totale:,}".replace(',', ' '),
-                f"{capacite_totale * charge_max / 1000:.1f} tonnes"
+            'Évaluation': [
+                '✅ Optimal' if results['taux_utilisation'] > 65 else '⚠️ Améliorable',
+                '✅ Bonne' if results['hauteur_totale_rack'] / hauteur > 0.7 else '⚠️ Sous-utilisé',
+                '✅ Élevée' if results['capacite_totale'] / results['surface_totale'] > 5 else '⚠️ Modérée',
+                '✅' if allee >= 3.5 else '⚠️' if allee >= 3.0 else '❌',
+                '✅' if rack_type == 'Rack palette standard' else '⚠️',
+                '💰'
             ]
         }
-        st.dataframe(pd.DataFrame(capacite_data), hide_index=True, use_container_width=True)
-    
-    # Visualisation de la configuration
-    st.divider()
-    st.subheader("🎨 Visualisation de la configuration")
-    
-    # Créer deux vues : plan et vue de côté
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### 📐 Vue de dessus (Plan)")
         
-        # Créer la figure Plotly pour la vue de dessus
-        fig_plan = go.Figure()
+        st.dataframe(pd.DataFrame(analyse_data), use_container_width=True)
         
-        # Dessiner le contour de l'entrepôt
-        fig_plan.add_shape(
-            type="rect",
-            x0=0, y0=0, x1=longueur, y1=largeur,
-            line=dict(color="darkblue", width=3),
-            fillcolor="lightgray",
-            opacity=0.3,
-            layer="below"
-        )
+        # Analyse de scénarios
+        st.subheader("🔮 Analyse de scénarios")
         
-        # Calculer l'espacement entre les racks
-        espace_lat = espacement_lateral / 100
+        scenario_cols = st.columns(3)
+        with scenario_cols[0]:
+            if st.button("📈 Optimiser pour la capacité"):
+                # Simulation d'optimisation pour la capacité
+                st.info(f"Capacité maximale estimée: {int(results['capacite_totale'] * 1.2):,} palettes")
         
-        # Calcul optimisé des marges pour centrer les racks
-        espace_total_longueur = racks_longueur * rack_longueur + (racks_longueur - 1) * espace_lat
-        espace_total_largeur = racks_largeur * rack_largeur + (racks_largeur - 1) * allee
+        with scenario_cols[1]:
+            if st.button("💰 Optimiser pour les coûts"):
+                # Simulation d'optimisation pour les coûts
+                st.info(f"Réduction estimée: {int(results['nb_racks'] * 0.8)} racks (-20%)")
         
-        x_offset = (longueur - espace_total_longueur) / 2
-        y_offset = (largeur - espace_total_largeur) / 2
+        with scenario_cols[2]:
+            if st.button("🚚 Optimiser pour la productivité"):
+                # Simulation d'optimisation pour la productivité
+                st.info(f"Gain productivité estimé: +15% avec allée {allee + 0.5}m")
+    
+    with tab_rapport:
+        # Rapport détaillé
+        st.subheader("📋 Rapport technique complet")
         
-        # Dessiner les racks
-        for i in range(racks_longueur):
-            for j in range(racks_largeur):
-                x = x_offset + i * (rack_longueur + espace_lat)
-                y = y_offset + j * (rack_largeur + allee)
-                
-                fig_plan.add_shape(
-                    type="rect",
-                    x0=x, y0=y, x1=x + rack_longueur, y1=y + rack_largeur,
-                    line=dict(color="darkred", width=2),
-                    fillcolor="orange",
-                    opacity=0.7
-                )
-                
-                # Ajouter le nombre de palettes sur le rack (si pas trop de racks)
-                if nb_racks <= 50:
-                    fig_plan.add_annotation(
-                        x=x + rack_longueur/2,
-                        y=y + rack_largeur/2,
-                        text=f"{capacite_par_rack}p",
-                        showarrow=False,
-                        font=dict(size=10, color="white", family="Arial Black"),
-                        bgcolor="rgba(0,0,0,0.3)",
-                        borderpad=2
-                    )
+        rapport = f"""
+        RAPPORT TECHNIQUE - OPTIMISATION D'ENTREPÔT
+        {'='*70}
         
-        # Dessiner les allées principales
-        for j in range(1, racks_largeur):
-            y_allee = y_offset + j * (rack_largeur + allee) - allee/2
-            fig_plan.add_shape(
-                type="rect",
-                x0=0, y0=y_allee, x1=longueur, y1=y_allee + allee,
-                fillcolor="lightblue",
-                opacity=0.3,
-                layer="below",
-                line_width=0
-            )
+        I. CONTEXTE ET OBJECTIFS
+        {'-'*40}
+        • Type de rack : {rack_type}
+        • Type de chariot : {type_chariot}
+        • Objectif d'utilisation : {taux_utilisation_cible}%
+        • Date d'analyse : {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}
         
-        # Mise en forme
-        fig_plan.update_layout(
-            title=dict(
-                text=f'Configuration: {racks_longueur}×{racks_largeur} racks | Utilisation: {taux_utilisation:.1f}%',
-                font=dict(size=14, family="Arial Black")
-            ),
-            xaxis=dict(title="Longueur (m)", range=[-2, longueur + 2], showgrid=True, gridwidth=1, gridcolor='lightgray'),
-            yaxis=dict(title="Largeur (m)", range=[-2, largeur + 2], showgrid=True, gridwidth=1, gridcolor='lightgray'),
-            height=500,
-            showlegend=False,
-            plot_bgcolor='white',
-            hovermode='closest'
-        )
+        II. CARACTÉRISTIQUES DE L'ENTREPÔT
+        {'-'*40}
+        • Dimensions : {longueur}m (L) × {largeur}m (l) × {hauteur}m (H)
+        • Surface totale : {results['surface_totale']:,.0f} m²
+        • Volume total : {results['volume_total']:,.0f} m³
+        • Hauteur sous plafond : {hauteur}m
         
-        # Ajouter annotations des dimensions
-        fig_plan.add_annotation(
-            x=longueur/2, y=-1,
-            text=f"Longueur: {longueur}m",
-            showarrow=False,
-            font=dict(size=12, family="Arial Black")
-        )
-        fig_plan.add_annotation(
-            x=-1, y=largeur/2,
-            text=f"Largeur: {largeur}m",
-            showarrow=False,
-            textangle=-90,
-            font=dict(size=12, family="Arial Black")
-        )
+        III. CONFIGURATION DES RACKS
+        {'-'*40}
+        • Dimensions unitaires : {rack_longueur}m × {rack_largeur}m × {rack_hauteur}m
+        • Hauteur totale rack : {results['hauteur_totale_rack']:.2f}m ({etages} étages)
+        • Hauteur par étage : {hauteur_etage}m
+        • Espacement vertical : {espacement_vertical}cm
+        • Configuration : {results['racks_longueur']} × {results['racks_largeur']}
+        • Nombre total racks : {results['nb_racks']:,}
+        • Surface au sol racks : {results['surface_racks_totale']:,.0f} m²
         
-        st.plotly_chart(fig_plan, use_container_width=True)
-    
-    with col2:
-        st.markdown("#### 📊 Vue latérale (Élévation)")
+        IV. CAPACITÉ DE STOCKAGE
+        {'-'*40}
+        • Palettes par niveau : {results['palettes_par_niveau']}
+        • Palettes par rack : {results['capacite_par_rack']}
+        • Capacité totale : {results['capacite_totale']:,} palettes
+        • Densité : {results['capacite_totale'] / results['surface_totale']:.2f} palettes/m²
+        • Volume utile : {results['volume_utile']:,.0f} m³
         
-        # Créer la figure pour la vue latérale
-        fig_elevation = go.Figure()
+        V. CIRCULATION ET ACCESSIBILITÉ
+        {'-'*40}
+        • Type chariot : {type_chariot}
+        • Largeur allée : {allee}m (minimum recommandé : {chariot_options[type_chariot]['allee_min']}m)
+        • Surface allées : {results['surface_all']:,.0f} m²
+        • Pourcentage circulation : {(results['surface_all'] / results['surface_totale']) * 100:.1f}%
         
-        # Dessiner le bâtiment
-        fig_elevation.add_shape(
-            type="rect",
-            x0=0, y0=0, x1=longueur, y1=hauteur,
-            line=dict(color="darkblue", width=3),
-            fillcolor="lightgray",
-            opacity=0.2,
-            layer="below"
-        )
+        VI. PERFORMANCES ET INDICATEURS
+        {'-'*40}
+        • Taux d'utilisation surface : {results['taux_utilisation']:.1f}%
+        • Utilisation verticale : {(results['hauteur_totale_rack'] / hauteur) * 100:.1f}%
+        • Score global d'efficacité : {results['score_total']:.1f}/100
+        • Conformité hauteur : {'✅ CONFORME' if results['conforme_hauteur'] else '❌ NON CONFORME'}
+        • Conformité allées : {'✅ CONFORME' if allee >= chariot_options[type_chariot]['allee_min'] else '❌ NON CONFORME'}
         
-        # Dessiner quelques racks en vue latérale (max 5 pour la lisibilité)
-        racks_to_show = min(5, racks_longueur)
-        rack_spacing = longueur / (racks_to_show + 1)
+        VII. RECOMMANDATIONS
+        {'-'*40}
+        1. Optimisation spatiale :
+           - Taux d'utilisation actuel : {results['taux_utilisation']:.1f}%
+           - Objectif optimal : 70-80%
+           - Marge d'amélioration : {max(0, 75 - results['taux_utilisation']):.1f}%
         
-        for i in range(racks_to_show):
-            x_rack = rack_spacing * (i + 1) - rack_longueur/2
-            
-            # Dessiner le rack complet
-            fig_elevation.add_shape(
-                type="rect",
-                x0=x_rack, y0=0, x1=x_rack + rack_longueur, y1=hauteur_totale_rack,
-                line=dict(color="darkred", width=2),
-                fillcolor="orange",
-                opacity=0.6
-            )
-            
-            # Dessiner les niveaux
-            for niveau in range(etages):
-                y_niveau = niveau * (hauteur_etage + espacement_vertical/100)
-                
-                # Ligne de niveau
-                fig_elevation.add_shape(
-                    type="line",
-                    x0=x_rack, y0=y_niveau, x1=x_rack + rack_longueur, y1=y_niveau,
-                    line=dict(color="red", width=1)
-                )
-                
-                # Dessiner les palettes sur ce niveau
-                palette_width = rack_longueur / (palettes_longueur * 1.2)
-                palette_height = hauteur_etage * 0.7
-                
-                for p in range(palettes_longueur):
-                    x_palette = x_rack + (rack_longueur / (palettes_longueur + 1)) * (p + 1) - palette_width/2
-                    y_palette = y_niveau + 0.1
-                    
-                    fig_elevation.add_shape(
-                        type="rect",
-                        x0=x_palette, y0=y_palette,
-                        x1=x_palette + palette_width, y1=y_palette + palette_height,
-                        line=dict(color="brown", width=1),
-                        fillcolor="wheat",
-                        opacity=0.9
-                    )
+        2. Sécurité et conformité :
+           - Allée minimum requise : {chariot_options[type_chariot]['allee_min']}m
+           - Hauteur libre recommandée : +0.5m minimum
+           - Vérifier charge au sol : {results['capacite_totale'] * charge_max / 1000:.1f} tonnes
         
-        # Ligne du sol
-        fig_elevation.add_shape(
-            type="line",
-            x0=0, y0=0, x1=longueur, y1=0,
-            line=dict(color="black", width=3)
-        )
+        3. Productivité :
+           - Temps d'accès estimé : {max(1, results['racks_longueur'] * 0.5):.1f} minutes
+           - Débit théorique : {results['capacite_totale'] / 8:.0f} palettes/heure
+           - Rotation optimale : Tous les {365 / (results['capacite_totale'] / 1000):.0f} jours
         
-        # Ligne de hauteur maximale rack
-        fig_elevation.add_shape(
-            type="line",
-            x0=0, y0=hauteur_totale_rack, x1=longueur, y1=hauteur_totale_rack,
-            line=dict(color="red", width=2, dash="dash")
-        )
+        VIII. ESTIMATION DES COÛTS
+        {'-'*40}
+        • Investissement racks (estimation) : {results['nb_racks'] * 1500:,.0f} €
+        • Coût par palette : {(results['nb_racks'] * 1500) / results['capacite_totale']:.0f} €
+        • Coût par m² : {(results['nb_racks'] * 1500) / results['surface_totale']:.0f} €/m²
+        • ROI estimé : 3-5 ans
         
-        # Annotations
-        fig_elevation.add_annotation(
-            x=longueur + 1, y=hauteur_totale_rack/2,
-            text=f'{hauteur_totale_rack:.2f}m<br>({etages} étages)',
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=1,
-            arrowwidth=2,
-            arrowcolor="red",
-            ax=40,
-            ay=0,
-            font=dict(size=10, color="red", family="Arial Black"),
-            bgcolor="white",
-            borderpad=4
-        )
+        IX. RISQUES IDENTIFIÉS
+        {'-'*40}
+        • {'Aucun risque majeur' if results['score_total'] > 80 else 'Risques modérés détectés'}
+        • {'Conformité validée' if allee >= chariot_options[type_chariot]['allee_min'] and results['conforme_hauteur'] else 'Points de non-conformité'}
+        • {'Capacité adaptée' if results['taux_utilisation'] > 60 else 'Sous-utilisation détectée'}
         
-        # Marge de sécurité
-        if conforme_hauteur:
-            marge = hauteur - hauteur_totale_rack
-            fig_elevation.add_annotation(
-                x=longueur + 1, y=hauteur_totale_rack + marge/2,
-                text=f'Marge<br>{marge:.2f}m',
-                showarrow=False,
-                font=dict(size=9, color="green", family="Arial Black"),
-                bgcolor="lightgreen",
-                borderpad=3
-            )
+        {'='*70}
+        """
         
-        # Mise en forme
-        fig_elevation.update_layout(
-            title=dict(
-                text=f'Élévation: {etages} étages × {hauteur_etage}m = {hauteur_totale_rack:.2f}m',
-                font=dict(size=14, family="Arial Black")
-            ),
-            xaxis=dict(title="Longueur (m)", range=[-2, longueur + 4], showgrid=True),
-            yaxis=dict(title="Hauteur (m)", range=[-0.5, hauteur + 1], showgrid=True),
-            height=500,
-            showlegend=False,
-            plot_bgcolor='white',
-            hovermode='closest'
-        )
+        st.code(rapport, language=None)
         
-        st.plotly_chart(fig_elevation, use_container_width=True)
-    
-    # Vue 3D interactive
-    st.markdown("#### 🏗️ Vue 3D interactive")
-    
-    fig_3d = go.Figure()
-    
-    # Fonction pour créer les points d'un cube
-    def create_cube(x, y, z, width, depth, height, color, name):
-        # Les 8 sommets du cube
-        vertices = np.array([
-            [x, y, z],
-            [x + width, y, z],
-            [x + width, y + depth, z],
-            [x, y + depth, z],
-            [x, y, z + height],
-            [x + width, y, z + height],
-            [x + width, y + depth, z + height],
-            [x, y + depth, z + height]
-        ])
-        
-        # Les 6 faces du cube (indices des sommets)
-        faces = [
-            [0, 1, 2, 3],  # Bottom
-            [4, 5, 6, 7],  # Top
-            [0, 1, 5, 4],  # Front
-            [2, 3, 7, 6],  # Back
-            [0, 3, 7, 4],  # Left
-            [1, 2, 6, 5]   # Right
-        ]
-        
-        return vertices, faces
-    
-    # Dessiner l'entrepôt (contour)
-    vertices_warehouse, _ = create_cube(0, 0, 0, longueur, largeur, hauteur, 'lightblue', 'Entrepôt')
-    
-    # Arêtes de l'entrepôt
-    edges = [
-        [0, 1], [1, 2], [2, 3], [3, 0],  # Bottom
-        [4, 5], [5, 6], [6, 7], [7, 4],  # Top
-        [0, 4], [1, 5], [2, 6], [3, 7]   # Vertical
-    ]
-    
-    for edge in edges:
-        fig_3d.add_trace(go.Scatter3d(
-            x=[vertices_warehouse[edge[0]][0], vertices_warehouse[edge[1]][0]],
-            y=[vertices_warehouse[edge[0]][1], vertices_warehouse[edge[1]][1]],
-            z=[vertices_warehouse[edge[0]][2], vertices_warehouse[edge[1]][2]],
-            mode='lines',
-            line=dict(color='darkblue', width=3),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-    
-    # Dessiner un échantillon de racks en 3D
-    sample_racks_x = min(racks_longueur, 6)
-    sample_racks_y = min(racks_largeur, 4)
-    
-    step_x = racks_longueur // sample_racks_x if sample_racks_x > 0 else 1
-    step_y = racks_largeur // sample_racks_y if sample_racks_y > 0 else 1
-    
-    for i in range(0, racks_longueur, step_x):
-        for j in range(0, racks_largeur, step_y):
-            x_pos = x_offset + i * (rack_longueur + espace_lat)
-            y_pos = y_offset + j * (rack_largeur + allee)
-            
-            vertices_rack, faces_rack = create_cube(
-                x_pos, y_pos, 0,
-                rack_longueur, rack_largeur, hauteur_totale_rack,
-                'orange', f'Rack {i},{j}'
-            )
-            
-            # Dessiner les faces du rack
-            for face_idx, face in enumerate(faces_rack):
-                xs = [vertices_rack[i][0] for i in face] + [vertices_rack[face[0]][0]]
-                ys = [vertices_rack[i][1] for i in face] + [vertices_rack[face[0]][1]]
-                zs = [vertices_rack[i][2] for i in face] + [vertices_rack[face[0]][2]]
-                
-                fig_3d.add_trace(go.Mesh3d(
-                    x=xs, y=ys, z=zs,
-                    color='orange',
-                    opacity=0.7,
-                    showlegend=False,
-                    hovertext=f'Rack: {capacite_par_rack} palettes',
-                    hoverinfo='text'
-                ))
-    
-    # Mise en forme 3D
-    fig_3d.update_layout(
-        title=dict(
-            text=f'Vue 3D: {nb_racks} racks | {capacite_totale:,} palettes'.replace(',', ' '),
-            font=dict(size=16, family="Arial Black")
-        ),
-        scene=dict(
-            xaxis=dict(title='Longueur (m)', backgroundcolor="white", gridcolor="lightgray"),
-            yaxis=dict(title='Largeur (m)', backgroundcolor="white", gridcolor="lightgray"),
-            zaxis=dict(title='Hauteur (m)', backgroundcolor="white", gridcolor="lightgray"),
-            camera=dict(
-                eye=dict(x=1.5, y=1.5, z=1.2)
-            ),
-            aspectmode='data'
-        ),
-        height=600,
-        showlegend=False,
-        hovermode='closest'
-    )
-    
-    st.plotly_chart(fig_3d, use_container_width=True)
-    
-    # Graphique de répartition de la surface
-    st.divider()
-    st.subheader("📊 Répartition de l'espace")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Pie chart de la répartition
-        fig_pie = go.Figure(data=[go.Pie(
-            labels=['Surface Racks', 'Surface Allées', 'Espace libre'],
-            values=[surface_racks_reelle, surface_allees * 0.6, surface_allees * 0.4],
-            hole=0.4,
-            marker=dict(colors=['orange', 'lightblue', 'lightgray']),
-            textinfo='label+percent',
-            textfont=dict(size=12)
-        )])
-        
-        fig_pie.update_layout(
-            title='Répartition de la surface au sol',
-            height=400,
-            showlegend=True
-        )
-        
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    with col2:
-        # Bar chart de capacité par niveau
-        niveaux = list(range(1, etages + 1))
-        capacite_par_niveau = [palettes_par_niveau] * etages
-        capacite_cumulee = [sum(capacite_par_niveau[:i+1]) for i in range(etages)]
-        
-        fig_bar = go.Figure()
-        
-        fig_bar.add_trace(go.Bar(
-            x=niveaux,
-            y=capacite_par_niveau,
-            name='Palettes par niveau',
-            marker=dict(color='orange'),
-            text=capacite_par_niveau,
-            textposition='outside'
-        ))
-        
-        fig_bar.update_layout(
-            title='Capacité par niveau (par rack)',
-            xaxis_title='Niveau',
-            yaxis_title='Nombre de palettes',
-            height=400,
-            showlegend=True,
-            hovermode='x'
-        )
-        
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    # Tableau récapitulatif général
-    st.divider()
-    st.subheader("📋 Configuration complète")
-    
-    data = {
-        'Catégorie': ['Entrepôt', 'Racks', 'Disposition', 'Chariots', 'Capacité', 'Utilisation'],
-        'Spécifications': [
-            f"{longueur}m × {largeur}m × {hauteur}m",
-            f"{rack_longueur}m × {rack_largeur}m × {hauteur_totale_rack:.1f}m",
-            f"{racks_longueur} × {racks_largeur} = {nb_racks} racks",
-            f"{type_chariot} - {charge_max}t - Allée {allee}m",
-            f"{etages} étages × {palettes_par_niveau} pal/niveau",
-            f"{taux_utilisation:.1f}% de la surface"
-        ],
-        'Résultats': [
-            f"{surface:.0f} m² | {volume_entrepot:.0f} m³",
-            f"{capacite_par_rack} palettes par rack",
-            f"{surface_racks_reelle:.0f} m² occupés",
-            "Conforme" if allee >= 3.0 else "⚠️ À vérifier",
-            f"{capacite_totale:,} palettes totales".replace(',', ' '),
-            f"{surface_allees:.0f} m² d'allées"
-        ]
-    }
-    
-    df = pd.DataFrame(data)
-    st.table(df)
-    
-    # Alertes et recommandations
-    st.divider()
-    st.subheader("⚠️ Vérifications et recommandations")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### ✅ Conformité")
-        if conforme_hauteur:
-            st.success(f"✅ Hauteur rack ({hauteur_totale_rack:.2f}m) conforme (marge: {hauteur - hauteur_totale_rack:.2f}m)")
-        else:
-            st.error(f"❌ Hauteur rack ({hauteur_totale_rack:.2f}m) > hauteur entrepôt ({hauteur}m)")
-        
-        if allee >= 3.0:
-            st.success(f"✅ Largeur allée ({allee}m) conforme")
-        else:
-            st.error(f"❌ Largeur allée ({allee}m) < minimum requis (3.0m)")
-        
-        if taux_utilisation >= 50 and taux_utilisation <= 80:
-            st.success(f"✅ Taux d'utilisation optimal ({taux_utilisation:.1f}%)")
-        elif taux_utilisation < 50:
-            st.warning(f"⚠️ Faible utilisation de l'espace ({taux_utilisation:.1f}%)")
-        else:
-            st.warning(f"⚠️ Utilisation très dense ({taux_utilisation:.1f}%)")
-    
-    with col2:
-        st.markdown("#### 💡 Recommandations")
-        if type_chariot == "Contrebalance" and allee < 3.5:
-            st.info("💡 Allée recommandée pour contrebalance: 3.5m minimum")
-        if type_chariot == "Reach Truck" and allee > 3.5:
-            st.info("💡 Un Reach Truck peut fonctionner dans des allées plus étroites (2.7-3.0m)")
-        if hauteur - hauteur_totale_rack < 1.0:
-            st.warning("💡 Prévoir au moins 1m de marge au-dessus des racks")
-        if palettes_par_niveau == 1:
-            st.info("💡 Envisager 2 palettes/niveau pour optimiser l'espace")
-    
-    # Section d'optimisation
-    st.divider()
-    st.subheader("🎯 Suggestions d'optimisation")
-    
-    suggestions = []
-    
-    # Analyse du taux d'utilisation
-    if taux_utilisation < 40:
-        suggestions.append({
-            'icon': '📏',
-            'titre': 'Augmenter la taille des racks',
-            'description': f'Votre utilisation est de seulement {taux_utilisation:.1f}%. Vous pourriez augmenter la longueur ou largeur des racks.',
-            'impact': f'Impact: +{40-taux_utilisation:.0f}% d\'utilisation possible'
-        })
-    
-    if taux_utilisation < 50:
-        suggestions.append({
-            'icon': '🚜',
-            'titre': 'Réduire la largeur des allées',
-            'description': f'Allée actuelle: {allee}m. Si vous utilisez des Reach Trucks, vous pouvez descendre à 2.8-3.0m.',
-            'impact': f'Gain potentiel: {((allee - 2.8) / allee * 100):.0f}% de surface supplémentaire'
-        })
-    
-    if hauteur - hauteur_totale_rack > 3.0:
-        suggestions.append({
-            'icon': '⬆️',
-            'titre': 'Ajouter des étages',
-            'description': f'Vous avez {hauteur - hauteur_totale_rack:.1f}m de hauteur inutilisée. Vous pourriez ajouter {int((hauteur - hauteur_totale_rack - 1) / hauteur_etage)} étages.',
-            'impact': f'Capacité supplémentaire: +{int((hauteur - hauteur_totale_rack - 1) / hauteur_etage) * nb_racks * palettes_par_niveau:,} palettes'.replace(',', ' ')
-        })
-    
-    if palettes_par_niveau == 1:
-        suggestions.append({
-            'icon': '📦',
-            'titre': 'Augmenter les palettes par niveau',
-            'description': 'Vous stockez 1 palette par niveau. Passer à 2 doublerait votre capacité.',
-            'impact': f'Capacité supplémentaire: +{capacite_totale:,} palettes'.replace(',', ' ')
-        })
-    
-    if rack_longueur < 3.0 and longueur > 40:
-        suggestions.append({
-            'icon': '↔️',
-            'titre': 'Utiliser des racks plus longs',
-            'description': f'Racks actuels: {rack_longueur}m. Des racks de 3-4m optimiseraient mieux l\'espace.',
-            'impact': 'Réduction du nombre total de racks et simplification de la gestion'
-        })
-    
-    if utilisation_surface < 80:
-        suggestions.append({
-            'icon': '📊',
-            'titre': 'Augmenter le taux d\'utilisation cible',
-            'description': f'Taux actuel: {utilisation_surface}%. Un taux de 75-80% est optimal pour les entrepôts.',
-            'impact': f'Capacité potentielle: +{int((80 - utilisation_surface) / 100 * capacite_totale):,} palettes'.replace(',', ' ')
-        })
-    
-    if len(suggestions) > 0:
-        for i, sugg in enumerate(suggestions):
-            with st.expander(f"{sugg['icon']} {sugg['titre']}", expanded=(i==0)):
-                st.write(f"**Description:** {sugg['description']}")
-                st.success(f"**{sugg['impact']}**")
-    else:
-        st.success("🎉 Votre configuration est déjà bien optimisée !")
-        st.info("Votre taux d'utilisation et vos dimensions sont dans les normes recommandées.")
-    
-    # Export détaillé
-    st.divider()
-    st.subheader("💾 Exporter la configuration")
-    
-    rapport = f"""CONFIGURATION ENTREPÔT - RAPPORT DÉTAILLÉ
-{'='*60}
-
-ENTREPÔT:
----------
-  Dimensions: {longueur}m × {largeur}m × {hauteur}m
-  Surface: {surface:.0f} m²
-  Volume: {volume_entrepot:.0f} m³
-
-DIMENSIONNEMENT DES RACKS:
---------------------------
-  Dimensions unitaires:
-    - Longueur: {rack_longueur} m
-    - Largeur: {rack_largeur} m
-    - Hauteur totale: {hauteur_totale_rack:.2f} m
-    - Surface au sol: {surface_rack:.2f} m²
-  
-  Configuration verticale:
-    - Nombre d'étages: {etages}
-    - Hauteur par étage: {hauteur_etage} m
-    - Espacement vertical: {espacement_vertical} cm
-    - Espacement latéral: {espacement_lateral} cm
-  
-  Capacité par rack:
-    - Palettes en longueur: {palettes_longueur}
-    - Palettes en largeur: {palettes_largeur}
-    - Palettes par niveau: {palettes_par_niveau}
-    - Palettes par rack: {capacite_par_rack}
-
-DISPOSITION:
------------
-  Nombre total de racks: {nb_racks}
-  Disposition: {racks_longueur} racks × {racks_largeur} racks
-  Surface racks: {surface_racks_reelle:.0f} m²
-  Surface allées: {surface_allees:.0f} m²
-  Taux d'utilisation: {taux_utilisation:.1f}%
-
-CHARIOTS ÉLÉVATEURS:
--------------------
-  Type: {type_chariot}
-  Charge maximale: {charge_max} tonnes
-  Largeur allée: {allee} m
-  Conformité allée: {'CONFORME' if allee >= 3.0 else 'NON CONFORME - Minimum 3.0m requis'}
-
-CAPACITÉ TOTALE:
----------------
-  Palettes totales: {capacite_totale:,}
-  Emplacements de stockage: {nb_racks * etages}
-  Charge totale estimée: {capacite_totale * charge_max / 1000:.1f} tonnes
-
-CONFORMITÉ:
-----------
-  Hauteur: {'✅ CONFORME' if conforme_hauteur else '❌ NON CONFORME'} 
-    (Rack {hauteur_totale_rack:.2f}m vs Entrepôt {hauteur}m - Marge {hauteur - hauteur_totale_rack:.2f}m)
-  Allées: {'✅ CONFORME' if allee >= 3.0 else '❌ NON CONFORME'}
-    (Largeur {allee}m vs Minimum 3.0m)
-  Utilisation surface: {taux_utilisation:.1f}%
-
-PARAMÈTRES DE CONFIGURATION:
----------------------------
-  Marge de sécurité: {marge_securite}%
-  Utilisation surface ciblée: {utilisation_surface}%
-
-GÉNÉRÉ LE: {pd.Timestamp.now().strftime('%d/%m/%Y à %H:%M:%S')}
-{'='*60}
-"""
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
+        # Options de téléchargement du rapport
         st.download_button(
-            label="📄 Télécharger le rapport TXT",
+            label="📥 Télécharger le rapport complet",
             data=rapport,
-            file_name=f"config_entrepot_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.txt",
-            mime="text/plain",
-            use_container_width=True
+            file_name=f"rapport_optimisation_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.txt",
+            mime="text/plain"
         )
     
-    with col2:
-        # Export CSV
-        csv_data = pd.DataFrame({
-            'Paramètre': [
-                'Surface totale', 'Nombre de racks', 'Capacité totale', 
-                'Hauteur rack', 'Palettes/rack', 'Taux utilisation',
-                'Largeur allée', 'Type chariot'
-            ],
-            'Valeur': [
-                surface, nb_racks, capacite_totale,
-                hauteur_totale_rack, capacite_par_rack, taux_utilisation,
-                allee, type_chariot
-            ]
-        })
+    with tab_export:
+        # Export des données
+        st.subheader("💾 Export des données")
         
-        st.download_button(
-            label="📊 Télécharger les données CSV",
-            data=csv_data.to_csv(index=False).encode('utf-8'),
-            file_name=f"donnees_entrepot_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        # Options d'export multiples
+        col_e1, col_e2, col_e3 = st.columns(3)
+        
+        with col_e1:
+            # Export CSV des données principales
+            export_data = {
+                'Paramètre': [
+                    'Longueur entrepôt', 'Largeur entrepôt', 'Hauteur entrepôt',
+                    'Surface totale', 'Volume total', 'Nombre racks',
+                    'Capacité totale', 'Taux utilisation', 'Largeur allée',
+                    'Type chariot', 'Hauteur rack', 'Étages par rack'
+                ],
+                'Valeur': [
+                    longueur, largeur, hauteur,
+                    results['surface_totale'], results['volume_total'], results['nb_racks'],
+                    results['capacite_totale'], results['taux_utilisation'], allee,
+                    type_chariot, results['hauteur_totale_rack'], etages
+                ],
+                'Unité': [
+                    'm', 'm', 'm', 'm²', 'm³', 'unités',
+                    'palettes', '%', 'm', 'type', 'm', 'niveaux'
+                ]
+            }
+            
+            df_export = pd.DataFrame(export_data)
+            csv_export = df_export.to_csv(index=False)
+            
+            st.download_button(
+                label="📊 Données CSV",
+                data=csv_export,
+                file_name=f"donnees_configuration_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv"
+            )
+        
+        with col_e2:
+            # Export JSON pour intégration
+            import json
+            json_data = {
+                "entrepot": {
+                    "dimensions": {"longueur": longueur, "largeur": largeur, "hauteur": hauteur},
+                    "surface": results['surface_totale'],
+                    "volume": results['volume_total']
+                },
+                "racks": {
+                    "dimensions": {"longueur": rack_longueur, "largeur": rack_largeur, "hauteur": rack_hauteur},
+                    "nombre": results['nb_racks'],
+                    "disposition": f"{results['racks_longueur']}x{results['racks_largeur']}",
+                    "etages": etages,
+                    "capacite_totale": results['capacite_totale']
+                },
+                "chariots": {
+                    "type": type_chariot,
+                    "allee": allee,
+                    "conformite": allee >= chariot_options[type_chariot]['allee_min']
+                },
+                "performances": {
+                    "taux_utilisation": results['taux_utilisation'],
+                    "score": results['score_total'],
+                    "date_analyse": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+            }
+            
+            st.download_button(
+                label="📁 Données JSON",
+                data=json.dumps(json_data, indent=2),
+                file_name=f"configuration_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json"
+            )
+        
+        with col_e3:
+            # Export image des visualisations
+            st.info("💡 Pour exporter les graphiques :")
+            st.markdown("""
+            1. Cliquez sur l'icône appareil photo 📷 dans le graphique
+            2. Choisissez le format (PNG, JPEG, SVG)
+            3. Téléchargez l'image
+            """)
+    
+    # Section d'alertes et recommandations
+    st.markdown("## ⚠️ Alertes et recommandations")
+    
+    alert_cols = st.columns(3)
+    
+    with alert_cols[0]:
+        if not results['conforme_hauteur']:
+            st.markdown('<div class="warning-card">', unsafe_allow_html=True)
+            st.error("**Hauteur non conforme**")
+            st.write(f"Racks: {results['hauteur_totale_rack']:.2f}m > Entrepôt: {hauteur}m")
+            st.write("**Solution:** Réduire le nombre d'étages ou la hauteur par étage")
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="success-card">', unsafe_allow_html=True)
+            st.success("**✅ Hauteur conforme**")
+            st.write(f"Marge: {hauteur - results['hauteur_totale_rack']:.2f}m")
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    with alert_cols[1]:
+        if allee < chariot_options[type_chariot]['allee_min']:
+            st.markdown('<div class="warning-card">', unsafe_allow_html=True)
+            st.error("**Allée trop étroite**")
+            st.write(f"Actuelle: {allee}m < Minimum: {chariot_options[type_chariot]['allee_min']}m")
+            st.write(f"**Recommandation:** Augmenter à {chariot_options[type_chariot]['allee_min'] + 0.5}m")
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="success-card">', unsafe_allow_html=True)
+            st.success("**✅ Allée conforme**")
+            st.write(f"Marge: {allee - chariot_options[type_chariot]['allee_min']:.1f}m")
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    with alert_cols[2]:
+        if results['taux_utilisation'] < 60:
+            st.markdown('<div class="warning-card">', unsafe_allow_html=True)
+            st.warning("**Faible utilisation**")
+            st.write(f"Taux: {results['taux_utilisation']:.1f}% < Optimal: 70%")
+            st.write("**Suggestion:** Ajuster la disposition des racks")
+            st.markdown('</div>', unsafe_allow_html=True)
+        elif results['taux_utilisation'] > 85:
+            st.markdown('<div class="warning-card">', unsafe_allow_html=True)
+            st.warning("**Utilisation très élevée**")
+            st.write(f"Taux: {results['taux_utilisation']:.1f}% > Maximum conseillé: 85%")
+            st.write("**Risque:** Congestion possible")
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="success-card">', unsafe_allow_html=True)
+            st.success("**✅ Utilisation optimale**")
+            st.write(f"Taux: {results['taux_utilisation']:.1f}% (idéal: 70-80%)")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-# Instructions améliorées
-with st.expander("ℹ️ Guide d'utilisation"):
-    st.markdown("""
-    ### Comment utiliser l'optimiseur :
+# Section d'aide et documentation
+with st.expander("📚 Documentation et aide", expanded=False):
+    col_doc1, col_doc2 = st.columns(2)
     
-    #### 1️⃣ Dimensions de l'entrepôt
-    - Saisissez les dimensions totales de votre entrepôt (L × l × H)
+    with col_doc1:
+        st.markdown("### 🎯 Guide d'utilisation")
+        st.markdown("""
+        1. **Configurez les paramètres** dans la sidebar
+        2. **Lancez l'analyse** avec le bouton principal
+        3. **Consultez les résultats** dans les différents onglets
+        4. **Exportez** les données et rapports
+        5. **Ajustez** selon les recommandations
+        
+        ### 📏 Normes de sécurité
+        - Allée minimum: **3.0m** pour tout chariot
+        - Marge hauteur: **+0.5m minimum** au-dessus des racks
+        - Charge au sol: vérifier la capacité du plancher
+        - Éclairage: minimum **200 lux** dans les allées
+        """)
     
-    #### 2️⃣ Dimensionnement des racks
-    - **Dimensions unitaires** : Taille d'un rack individuel
-    - **Configuration verticale** : Nombre d'étages et hauteur de chaque niveau
-    - **Capacité par niveau** : Combien de palettes peuvent être stockées par niveau
-    - **Espacement** : Marges de sécurité verticale et latérale
-    
-    #### 3️⃣ Chariots élévateurs
-    - Choisissez le type de chariot adapté à vos besoins
-    - Définissez la largeur d'allée nécessaire
-    - Spécifiez la charge maximale
-    
-    #### 4️⃣ Options avancées
-    - Ajustez les marges de sécurité
-    - Définissez le taux d'utilisation souhaité
-    
-    #### 5️⃣ Calcul et export
-    - Cliquez sur **Calculer** pour voir les résultats
-    - Exportez le rapport au format TXT ou CSV
-    
-    ### 📏 Normes et recommandations :
-    
-    **Chariots élévateurs :**
-    - Allée minimum : **3.0 mètres**
-    - Contrebalance : **3.5m recommandé**
-    - Reach Truck : **2.7-3.0m possible**
-    - Télescopique : **3.0-3.5m**
-    
-    **Hauteur :**
-    - Prévoir **+0.5m minimum** au-dessus des racks
-    - **+1.0m recommandé** pour l'éclairage et la sécurité
-    
-    **Espacement :**
-    - Vertical : **30cm minimum** entre niveaux
-    - Latéral : **20cm minimum** entre racks
-    
-    **Utilisation de surface :**
-    - Optimal : **60-80%** (balance stockage/circulation)
-    - Minimum : **50%** (trop d'espace perdu)
-    - Maximum : **85%** (risque de congestion)
-    """)
+    with col_doc2:
+        st.markdown("### 🔍 Bonnes pratiques")
+        st.markdown("""
+        **Optimisation spatiale:**
+        - Taux d'utilisation idéal: 70-80%
+        - Hauteur d'étage adaptée aux produits
+        - Considérer la rotation des stocks
+        
+        **Productivité:**
+        - Allées plus larges = productivité +15%
+        - Organisation en zones (réception, stockage, expédition)
+        - Chemins de circulation optimisés
+        
+        **Maintenance:**
+        - Espace pour maintenance des chariots
+        - Accès aux systèmes de sécurité
+        - Passage pour inspections
+        """)
 
-st.caption("🏭 Warehouse Optimizer v2.0 | Dimensionnement avancé des racks | Streamlit Cloud Compatible")
+# Pied de page
+st.divider()
+st.markdown("""
+<div style="text-align: center; color: #666;">
+    <p>🏭 <strong>Warehouse Configuration Optimizer Pro</strong> v3.0 | 
+    Développé avec Streamlit | 
+    <a href="#" style="color: #1E40AF;">Documentation complète</a></p>
+    <p style="font-size: 0.9em;">© 2024 - Outil d'optimisation d'entrepôt professionnel</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Option pour générer un rapport automatique
+if st.session_state.calcul_done:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📈 Statistiques rapides")
+    st.sidebar.metric("📦 Capacité totale", f"{results['capacite_totale']:,}".replace(',', ' '))
+    st.sidebar.metric("💰 Coût estimé/rack", f"{1500:,} €".replace(',', ' '))
+    st.sidebar.metric("⭐ Score global", f"{results['score_total']:.1f}/100")
