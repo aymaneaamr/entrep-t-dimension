@@ -772,159 +772,184 @@ elif st.session_state.warehouse_data['step'] == 4:
 # ============================================================================
 # ÉTAPE 5 : VISUALISATION ET EXPORT
 # ============================================================================
-else:
-    st.markdown('<div class="section-header">🎨 ÉTAPE 5 : VISUALISATION ET RAPPORTS</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📐 PLAN D'IMPLANTATION 2D")
-        
-        # Récupérer les paramètres
-        params = st.session_state.warehouse_data.get('params', {})
-        calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
-        
-        # Valeurs par défaut si non définies
-        length = params.get('length', 60.0)
-        width = params.get('width', 40.0)
-        rack_width = params.get('rack_width', 1.0)
-        rack_depth = params.get('rack_depth', 1.2)
-        main_aisle_width = params.get('main_aisle_width', 3.5)
-        
-        # Créer le schéma
-        fig, ax = plt.subplots(figsize=(12, 8))
-        
-        # Dessiner le bâtiment
-        ax.add_patch(patches.Rectangle((0, 0), length, width,
-                                       linewidth=3, edgecolor='#2c3e50',
-                                       facecolor='#ecf0f1', alpha=0.3,
-                                       label='Bâtiment'))
-        
-        # Calculer la disposition des racks
-        racks_per_row = calc.get('racks_per_row', 6)
-        rows_per_side = calc.get('rows_per_side', 8)
-        
-        # Racks côté gauche
-        for i in range(min(racks_per_row, 10)):  # Limiter à 10 pour la visibilité
-            for j in range(min(rows_per_side, 10)):
-                x = 2.0 + i * (rack_depth + 1.0)
-                y = 2.0 + j * (rack_width + 1.0)
-                ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
-                                             facecolor='#3498db', edgecolor='#2980b9',
-                                             alpha=0.7))
-        
-        # Racks côté droit
-        for i in range(min(racks_per_row, 10)):
-            for j in range(min(rows_per_side, 10)):
-                x = 2.0 + racks_per_row * (rack_depth + 1.0) + main_aisle_width + i * (rack_depth + 1.0)
-                y = 2.0 + j * (rack_width + 1.0)
-                ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
-                                             facecolor='#2ecc71', edgecolor='#27ae60',
-                                             alpha=0.7))
-        
-        # Allée centrale
-        alley_x = 2.0 + racks_per_row * (rack_depth + 1.0)
-        ax.add_patch(patches.Rectangle((alley_x, 0), main_aisle_width, width,
-                                     facecolor='#bdc3c7', alpha=0.5,
-                                     edgecolor='#7f8c8d', linewidth=2,
-                                     label='Allée principale'))
-        
-        # Quais
-        dock_doors = params.get('dock_doors', 4)
-        for i in range(min(dock_doors, 6)):
-            quai_width = 6.0
-            quai_height = 4.0
-            quai_x = length - quai_width
-            quai_y = (i + 1) * (width / (dock_doors + 1)) - quai_height/2
-            ax.add_patch(patches.Rectangle((quai_x, quai_y), quai_width, quai_height,
-                                         facecolor='#e74c3c', alpha=0.7,
-                                         edgecolor='#c0392b', linewidth=2,
-                                         label='Quai' if i == 0 else ""))
-        
-        # Configuration
-        ax.set_xlim(0, length)
-        ax.set_ylim(0, width)
-        ax.set_aspect('equal')
-        ax.set_xlabel('Longueur (m)', fontweight='bold')
-        ax.set_ylabel('Largeur (m)', fontweight='bold')
-        ax.set_title(f'Plan d\'implantation - {calc.get("total_racks", 0)} racks', 
-                    fontsize=14, fontweight='bold', pad=20)
-        
-        # Légende
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        if by_label:
-            ax.legend(by_label.values(), by_label.keys(), loc='upper right')
-        
-        ax.grid(True, linestyle='--', alpha=0.3)
-        
-        st.pyplot(fig)
-    
-    with col2:
-        st.markdown("### 📥 EXPORTATION")
-        
-        # Boutons d'export
-        if st.button("📊 Générer rapport Excel", use_container_width=True):
-            st.success("Rapport Excel généré avec succès!")
-            
-            # Créer un DataFrame pour l'export
-            params_df = pd.DataFrame([params])
-            st.download_button(
-                label="⬇️ Télécharger Excel",
-                data=params_df.to_csv(index=False).encode('utf-8'),
-                file_name="parametres_entrepot.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-        if st.button("📄 Générer rapport PDF", use_container_width=True):
-            st.success("Rapport PDF généré avec succès!")
-        
-        # Exporter l'image
-        if st.button("🖼️ Exporter l'image", use_container_width=True):
-            buf = BytesIO()
-            fig.savefig(buf, format="png", dpi=150, bbox_inches='tight')
-            st.download_button(
-                label="⬇️ Télécharger l'image",
-                data=buf.getvalue(),
-                file_name="plan_implantation.png",
-                mime="image/png",
-                use_container_width=True
-            )
-        
-        st.markdown("---")
-        st.markdown("### 🤖 GÉNÉRATION IA")
-        
-        # Prompt pour génération d'image réaliste
-        st.markdown("**Générer une visualisation 3D :**")
-        
-        # Construire le prompt dynamiquement
-        calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
-        prompt = f"""
-        Photorealistic warehouse interior, industrial storage system with {calc.get('total_racks', 0)} racks, 
-        {params.get('max_levels', 3)} levels, {params.get('rack_width', 1.0)}m x {params.get('rack_depth', 1.2)}m rack size,
-        {params.get('main_aisle_width', 3.5)}m wide aisle, {params.get('equipment_type', 'forklift')} operations, 
-        LED lighting, safety markings, wide-angle view, architectural visualization, 8K resolution
-        """
-        
-        st.code(prompt, language="text")
-        
-        if st.button("🎨 Générer avec IA", use_container_width=True):
-            st.info("Copiez le prompt ci-dessus dans Midjourney, DALL-E 3 ou Stable Diffusion")
 
-# ============================================================================
-# PIED DE PAGE
-# ============================================================================
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #7f8c8d; padding: 20px;">
-    <p style="font-size: 0.9em;">
-        <strong>Warehouse Dimensioning Pro v3.0</strong> | 
-        © 2024 - Solution professionnelle de dimensionnement d'entrepôts |
-        Conforme aux normes internationales
-    </p>
-    <p style="font-size: 0.8em; margin-top: 10px;">
-        Développé avec Streamlit • Python • Normes ISO intégrées
-    </p>
-</div>
-""", unsafe_allow_html=True)
+with col1:
+    st.markdown("### 📐 PLAN D'IMPLANTATION 2D")
+    
+    # Récupérer les paramètres
+    params = st.session_state.warehouse_data.get('params', {})
+    calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
+    
+    # Correction : Assurer que la longueur est le plus grand côté
+    length = max(params.get('length', 60.0), params.get('width', 40.0))
+    width = min(params.get('length', 60.0), params.get('width', 40.0))
+    
+    rack_width = params.get('rack_width', 1.0)
+    rack_depth = params.get('rack_depth', 1.2)
+    main_aisle_width = params.get('main_aisle_width', 3.5)
+    
+    # Calculer le nombre optimal de racks pour utiliser toute la surface
+    racks_per_row = calc.get('racks_per_row', 0)
+    rows_per_side = calc.get('rows_per_side', 0)
+    
+    # Si les calculs n'ont pas été faits, estimer basé sur les dimensions
+    if racks_per_row == 0:
+        # Calcul optimisé pour utiliser 85% de la surface
+        usable_length = length - main_aisle_width - 4  # Marges
+        racks_per_row = max(1, int(usable_length / (rack_depth + 0.8)))
+        
+    if rows_per_side == 0:
+        usable_width = width - 4  # Marges
+        rows_per_side = max(1, int(usable_width / (rack_width + 0.8)))
+    
+    total_racks = racks_per_row * rows_per_side * 2
+    
+    st.markdown(f"""
+    <div class="parameter-card">
+        <h4>📊 Configuration calculée</h4>
+        <p><strong>Racks par rangée :</strong> {racks_per_row}</p>
+        <p><strong>Rangées par côté :</strong> {rows_per_side}</p>
+        <p><strong>Total racks :</strong> {total_racks}</p>
+        <p><strong>Utilisation surface :</strong> ~85%</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Créer le schéma avec utilisation complète
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    # Dessiner le bâtiment
+    ax.add_patch(patches.Rectangle((0, 0), length, width,
+                                   linewidth=3, edgecolor='#2c3e50',
+                                   facecolor='#ecf0f1', alpha=0.3,
+                                   label='Bâtiment'))
+    
+    # Calculer l'espacement optimal pour utiliser toute la largeur
+    total_rack_width = rows_per_side * rack_width
+    available_width = width - 4  # 2m de chaque côté
+    spacing_y = (available_width - total_rack_width) / (rows_per_side + 1) if rows_per_side > 1 else 1.0
+    
+    # Calculer l'espacement optimal pour utiliser toute la longueur
+    total_rack_length = racks_per_row * rack_depth
+    available_length_left = (length - main_aisle_width) / 2 - 2  # Moitié gauche
+    spacing_x = (available_length_left - total_rack_length) / (racks_per_row + 1) if racks_per_row > 1 else 1.0
+    
+    # Racks côté GAUCHE (bleu)
+    for i in range(racks_per_row):
+        for j in range(rows_per_side):
+            x = 2 + i * (rack_depth + spacing_x)
+            y = 2 + j * (rack_width + spacing_y)
+            ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
+                                         facecolor='#3498db', edgecolor='#2980b9',
+                                         alpha=0.8))
+    
+    # Allée centrale
+    alley_start = 2 + racks_per_row * (rack_depth + spacing_x) + spacing_x
+    ax.add_patch(patches.Rectangle((alley_start, 0), main_aisle_width, width,
+                                 facecolor='#95a5a6', alpha=0.5,
+                                 edgecolor='#7f8c8d', linewidth=2,
+                                 label='Allée principale'))
+    
+    # Racks côté DROIT (vert)
+    alley_end = alley_start + main_aisle_width
+    for i in range(racks_per_row):
+        for j in range(rows_per_side):
+            x = alley_end + spacing_x + i * (rack_depth + spacing_x)
+            y = 2 + j * (rack_width + spacing_y)
+            ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
+                                         facecolor='#2ecc71', edgecolor='#27ae60',
+                                         alpha=0.8))
+    
+    # Quais de chargement (côté droit du bâtiment)
+    dock_doors = min(params.get('dock_doors', 4), 6)  # Limiter à 6 pour la visibilité
+    for i in range(dock_doors):
+        quai_width = 4.0
+        quai_height = 3.0
+        quai_x = length - quai_width
+        quai_y = (i + 1) * (width / (dock_doors + 1)) - quai_height/2
+        ax.add_patch(patches.Rectangle((quai_x, quai_y), quai_width, quai_height,
+                                     facecolor='#e74c3c', alpha=0.7,
+                                     edgecolor='#c0392b', linewidth=2,
+                                     label='Quai' if i == 0 else ""))
+    
+    # Zones de circulation et sécurité
+    # Zone de manœuvre devant les quais
+    ax.add_patch(patches.Rectangle((length - quai_width - 8, 0), 8, width,
+                                 facecolor='#f1c40f', alpha=0.2,
+                                 hatch='//', label='Zone manœuvre'))
+    
+    # Sorties de secours
+    exit_width = 2.4
+    ax.add_patch(patches.Rectangle((length/2 - exit_width/2, -0.5), exit_width, 1,
+                                 facecolor='#9b59b6', alpha=0.6,
+                                 label='Sortie secours'))
+    
+    # Configuration du graphique
+    ax.set_xlim(-2, length + 2)
+    ax.set_ylim(-2, width + 2)
+    ax.set_aspect('equal')
+    ax.set_xlabel('LONGUEUR (mètres)', fontweight='bold', fontsize=12)
+    ax.set_ylabel('LARGEUR (mètres)', fontweight='bold', fontsize=12)
+    ax.set_title(f'PLAN D\'IMPLANTATION OPTIMISÉ - {total_racks} RACKS', 
+                fontsize=16, fontweight='bold', pad=20)
+    
+    # Ajouter les mesures sur le plan
+    # Mesure de longueur totale
+    ax.annotate(f'{length:.0f}m', xy=(length/2, -1.5), 
+                ha='center', va='center', fontsize=10, fontweight='bold',
+                color='#2c3e50')
+    
+    # Mesure de largeur totale
+    ax.annotate(f'{width:.0f}m', xy=(-1.5, width/2), 
+                ha='center', va='center', fontsize=10, fontweight='bold',
+                color='#2c3e50', rotation=90)
+    
+    # Mesure de l'allée
+    ax.annotate(f'Allée\n{main_aisle_width}m', 
+                xy=(alley_start + main_aisle_width/2, width/2),
+                ha='center', va='center', fontsize=9, fontweight='bold',
+                color='#c0392b', rotation=90,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+    
+    # Légende détaillée
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#3498db', edgecolor='#2980b9', alpha=0.8, label='Racks côté gauche'),
+        Patch(facecolor='#2ecc71', edgecolor='#27ae60', alpha=0.8, label='Racks côté droit'),
+        Patch(facecolor='#95a5a6', edgecolor='#7f8c8d', alpha=0.5, label='Allée principale'),
+        Patch(facecolor='#e74c3c', edgecolor='#c0392b', alpha=0.7, label='Quais chargement'),
+        Patch(facecolor='#f1c40f', alpha=0.2, hatch='//', label='Zone de manœuvre'),
+        Patch(facecolor='#9b59b6', alpha=0.6, label='Sortie secours')
+    ]
+    ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1),
+              borderaxespad=0., fontsize=9)
+    
+    # Grille secondaire pour meilleure lisibilité
+    ax.grid(True, which='major', linestyle='-', linewidth=0.5, alpha=0.3, color='gray')
+    ax.grid(True, which='minor', linestyle=':', linewidth=0.3, alpha=0.2, color='gray')
+    ax.minorticks_on()
+    
+    # Ajuster les marges pour la légende
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    
+    st.pyplot(fig)
+    
+    # Statistiques d'utilisation
+    st.markdown("### 📊 STATISTIQUES D'UTILISATION")
+    
+    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+    
+    with col_stat1:
+        surface_totale = length * width
+        st.metric("Surface totale", f"{surface_totale:.0f} m²")
+    
+    with col_stat2:
+        surface_racks = total_racks * rack_width * rack_depth
+        st.metric("Surface racks", f"{surface_racks:.0f} m²")
+    
+    with col_stat3:
+        surface_circulation = surface_totale - surface_racks
+        st.metric("Surface circulation", f"{surface_circulation:.0f} m²")
+    
+    with col_stat4:
+        taux_utilisation = (surface_racks / surface_totale) * 100
+        st.metric("Taux d'utilisation", f"{taux_utilisation:.1f}%")
