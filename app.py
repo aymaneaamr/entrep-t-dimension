@@ -15,10 +15,11 @@ st.set_page_config(
 )
 
 # ============================================================================
-# STYLES ET CSS
+# STYLES ET CSS AMÉLIORÉ
 # ============================================================================
 st.markdown("""
 <style>
+    /* Styles généraux */
     .main-header {
         text-align: center;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -46,10 +47,19 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         transition: transform 0.3s;
         height: 100%;
+        color: #2c3e50 !important; /* Texte en foncé pour contraste */
     }
     
     .metric-card:hover {
         transform: translateY(-5px);
+    }
+    
+    .metric-card h1, .metric-card h2, .metric-card h3, .metric-card h4 {
+        color: #2c3e50 !important;
+    }
+    
+    .metric-card p {
+        color: #34495e !important;
     }
     
     .warning-box {
@@ -58,6 +68,7 @@ st.markdown("""
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
+        color: #856404 !important;
     }
     
     .success-box {
@@ -66,14 +77,223 @@ st.markdown("""
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
+        color: #155724 !important;
     }
     
     .parameter-card {
-        background: #f8f9fa;
+        background: white;
         padding: 1.2rem;
         border-radius: 10px;
         border: 2px solid #e9ecef;
         margin-bottom: 1rem;
+        color: #2c3e50 !important;
+    }
+    
+    .parameter-card h4 {
+        color: #2c3e50 !important;
+    }
+    
+    .parameter-card p {
+        color: #34495e !important;
+    }
+    
+    /* Amélioration de la sidebar */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #2c3e50 0%, #1a2530 100%);
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #ecf0f1 !important;
+    }
+    
+    [data-testid="stSidebar"] .stRadio label {
+        color: #ecf0f1 !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stNumberInput label {
+        color: #ecf0f1 !important;
+    }
+    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 10px;
+        border-radius: 8px;
+    }
+    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+        padding: 8px;
+        margin: 4px 0;
+        border-radius: 5px;
+        transition: background 0.3s;
+    }
+    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
+        background: rgba(52, 152, 219, 0.3);
+    }
+    
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-baseweb="radio"] div:first-child {
+        color: #3498db !important;
+    }
+    
+    /* Amélioration des inputs dans la sidebar */
+    [data-testid="stSidebar"] input, 
+    [data-testid="stSidebar"] .stTextInput input,
+    [data-testid="stSidebar"] .stNumberInput input {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    }
+    
+    [data-testid="stSidebar"] input:focus {
+        border-color: #3498db !important;
+        box-shadow: 0 0 0 1px #3498db !important;
+    }
+    
+    /* Amélioration des selectbox */
+    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] div {
+        color: white !important;
+    }
+    
+    /* Boutons dans la sidebar */
+    [data-testid="stSidebar"] button {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+        color: white !important;
+        border: none !important;
+        font-weight: bold !important;
+    }
+    
+    [data-testid="stSidebar"] button:hover {
+        background: linear-gradient(135deg, #2980b9 0%, #3498db 100%) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 5px 15px rgba(41, 128, 185, 0.4) !important;
+    }
+    
+    /* Titres dans la sidebar */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4,
+    [data-testid="stSidebar"] h5,
+    [data-testid="stSidebar"] h6 {
+        color: #ecf0f1 !important;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    }
+    
+    /* Onglets personnalisés */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 10px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        height: 60px;
+        white-space: pre-wrap;
+        background-color: #e9ecef;
+        border-radius: 10px 10px 0px 0px;
+        gap: 1px;
+        padding-top: 15px;
+        padding-bottom: 15px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #3498db !important;
+        color: white !important;
+    }
+    
+    /* Boutons principaux */
+    .stButton>button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: bold;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
+        transition: all 0.3s;
+    }
+    
+    .stButton>button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Amélioration des dataframes */
+    .dataframe {
+        background: white !important;
+        color: #2c3e50 !important;
+    }
+    
+    .dataframe th {
+        background: #3498db !important;
+        color: white !important;
+        font-weight: bold !important;
+    }
+    
+    .dataframe td {
+        color: #2c3e50 !important;
+    }
+    
+    /* Code blocks */
+    .stCode {
+        background: #2c3e50 !important;
+        color: #ecf0f1 !important;
+        border-radius: 8px;
+        padding: 15px;
+    }
+    
+    /* Tooltips et info boxes */
+    .stAlert {
+        background: #e8f4fd !important;
+        color: #0c5460 !important;
+        border-color: #b8daff !important;
+    }
+    
+    /* Amélioration de la visibilité du texte partout */
+    p, span, div:not([class*="sidebar"]) {
+        color: #2c3e50 !important;
+    }
+    
+    /* Correction pour les métriques */
+    [data-testid="stMetricValue"], 
+    [data-testid="stMetricLabel"] {
+        color: #2c3e50 !important;
+    }
+    
+    /* Grilles et séparateurs */
+    hr {
+        border-color: #bdc3c7 !important;
+    }
+    
+    /* Amélioration de la visibilité des labels dans le contenu principal */
+    .main .stNumberInput label,
+    .main .stTextInput label,
+    .main .stSelectbox label,
+    .main .stSlider label {
+        color: #2c3e50 !important;
+        font-weight: bold !important;
+    }
+    
+    /* Amélioration de la visibilité des valeurs dans les inputs */
+    .main .stNumberInput input,
+    .main .stTextInput input {
+        color: #2c3e50 !important;
+        background: white !important;
+        border: 1px solid #ddd !important;
+    }
+    
+    /* Correction pour les titres dans le contenu principal */
+    .main h1, .main h2, .main h3, .main h4, .main h5, .main h6 {
+        color: #2c3e50 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -291,7 +511,7 @@ class WarehouseCalculator:
 with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
-        <h2 style="color: white;">📋 NAVIGATION</h2>
+        <h2 style="color: #ecf0f1;">📋 NAVIGATION</h2>
     </div>
     """, unsafe_allow_html=True)
     
@@ -351,7 +571,6 @@ if st.session_state.warehouse_data['step'] == 1:
         with tab1:
             c1, c2, c3 = st.columns(3)
             with c1:
-                # CORRECTION ICI : Tous les paramètres doivent être du même type
                 length = st.number_input("**Longueur (m)**", 
                                        min_value=10.0, max_value=200.0, value=60.0, step=1.0,
                                        help="Longueur totale du bâtiment")
@@ -360,7 +579,6 @@ if st.session_state.warehouse_data['step'] == 1:
                                       min_value=10.0, max_value=100.0, value=40.0, step=1.0,
                                       help="Largeur totale du bâtiment")
             with c3:
-                # CORRECTION ICI : step=0.5 est float, donc min_value et max_value doivent être float
                 clear_height = st.number_input("**Hauteur libre (m)**", 
                                              min_value=3.0, max_value=20.0, value=9.0, step=0.5,
                                              help="Hauteur sous poutre")
@@ -383,7 +601,6 @@ if st.session_state.warehouse_data['step'] == 1:
                                            min_value=1, max_value=20, value=4, step=1,
                                            help="Quais de chargement/déchargement")
             with c2:
-                # CORRECTION ICI : step=0.1 est float
                 door_width = st.number_input("**Largeur porte (m)**", 
                                            min_value=2.0, max_value=5.0, value=3.0, step=0.1,
                                            help="Largeur des portes de quai")
@@ -453,7 +670,6 @@ elif st.session_state.warehouse_data['step'] == 2:
                                               min_value=100.0, max_value=2000.0, value=800.0, step=50.0,
                                               help="Poids moyen par palette")
             with c3:
-                # CORRECTION ICI : step=0.1
                 pallet_height = st.number_input("**Hauteur palette (m)**", 
                                               min_value=0.5, max_value=2.5, value=1.2, step=0.1,
                                               help="Hauteur moyenne des charges")
@@ -464,12 +680,10 @@ elif st.session_state.warehouse_data['step'] == 2:
                 rack_type = st.selectbox("**Type de rack**", 
                                        ["Palettier conventionnel", "Drive-in", "Palettier mobile", "Cantilever"])
             with c2:
-                # CORRECTION ICI : step=0.1
                 rack_width = st.number_input("**Largeur rack (m)**", 
                                            min_value=0.8, max_value=3.0, value=1.0, step=0.1,
                                            help="Largeur d'un module de rack")
             with c3:
-                # CORRECTION ICI : step=0.1
                 rack_depth = st.number_input("**Profondeur rack (m)**", 
                                            min_value=0.8, max_value=3.0, value=1.2, step=0.1,
                                            help="Profondeur d'un module de rack")
@@ -554,12 +768,10 @@ elif st.session_state.warehouse_data['step'] == 3:
         with tab2:
             c1, c2 = st.columns(2)
             with c1:
-                # CORRECTION ICI : step=0.1
                 main_aisle_width = st.number_input("**Largeur allée principale (m)**", 
                                                  min_value=2.0, max_value=6.0, value=3.5, step=0.1,
                                                  help="Largeur des allées de circulation")
             with c2:
-                # CORRECTION ICI : step=0.1
                 secondary_aisle_width = st.number_input("**Largeur allée secondaire (m)**", 
                                                       min_value=1.5, max_value=3.0, value=2.0, step=0.1,
                                                       help="Largeur des allées entre racks")
@@ -1011,3 +1223,20 @@ elif st.session_state.warehouse_data['step'] == 5:
         
         if st.button("🎨 Générer avec IA", use_container_width=True):
             st.info("Copiez le prompt ci-dessus dans Midjourney, DALL-E 3 ou Stable Diffusion")
+
+# ============================================================================
+# PIED DE PAGE
+# ============================================================================
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #7f8c8d; padding: 20px;">
+    <p style="font-size: 0.9em;">
+        <strong>Warehouse Dimensioning Pro v3.0</strong> | 
+        © 2024 - Solution professionnelle de dimensionnement d'entrepôts |
+        Conforme aux normes internationales
+    </p>
+    <p style="font-size: 0.8em; margin-top: 10px;">
+        Développé avec Streamlit • Python • Normes ISO intégrées
+    </p>
+</div>
+""", unsafe_allow_html=True)
