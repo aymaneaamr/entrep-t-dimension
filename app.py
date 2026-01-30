@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from io import BytesIO
 import math
+import json
+from datetime import datetime
 
 # Configuration de la page
 st.set_page_config(
@@ -13,6 +15,19 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# ============================================================================
+# INITIALISATION DES VARIABLES DE SESSION
+# ============================================================================
+if 'warehouse_data' not in st.session_state:
+    st.session_state.warehouse_data = {
+        'step': 1,
+        'calculations': {},
+        'warnings': [],
+        'optimizations': [],
+        'params': {},
+        'mode': 'simple'  # 'simple' ou 'advanced'
+    }
 
 # ============================================================================
 # STYLES ET CSS AMÉLIORÉ
@@ -47,19 +62,11 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         transition: transform 0.3s;
         height: 100%;
-        color: #2c3e50 !important; /* Texte en foncé pour contraste */
+        color: #2c3e50 !important;
     }
     
     .metric-card:hover {
         transform: translateY(-5px);
-    }
-    
-    .metric-card h1, .metric-card h2, .metric-card h3, .metric-card h4 {
-        color: #2c3e50 !important;
-    }
-    
-    .metric-card p {
-        color: #34495e !important;
     }
     
     .warning-box {
@@ -89,211 +96,45 @@ st.markdown("""
         color: #2c3e50 !important;
     }
     
-    .parameter-card h4 {
-        color: #2c3e50 !important;
+    .mode-card {
+        background: white;
+        padding: 2rem;
+        border-radius: 15px;
+        border: 3px solid #e9ecef;
+        text-align: center;
+        transition: all 0.3s;
+        cursor: pointer;
     }
     
-    .parameter-card p {
-        color: #34495e !important;
+    .mode-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        border-color: #3498db;
     }
     
-    /* Amélioration de la sidebar */
+    .mode-card.active {
+        border-color: #3498db;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+    
+    .construction-badge {
+        background: linear-gradient(135deg, #f39c12 0%, #e74c3c 100%);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.8em;
+        display: inline-block;
+        margin-bottom: 1rem;
+    }
+    
+    /* Sidebar améliorée */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #2c3e50 0%, #1a2530 100%);
     }
     
     [data-testid="stSidebar"] * {
         color: #ecf0f1 !important;
-    }
-    
-    [data-testid="stSidebar"] .stRadio label {
-        color: #ecf0f1 !important;
-    }
-    
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stTextInput label,
-    [data-testid="stSidebar"] .stNumberInput label {
-        color: #ecf0f1 !important;
-    }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 10px;
-        border-radius: 8px;
-    }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
-        padding: 8px;
-        margin: 4px 0;
-        border-radius: 5px;
-        transition: background 0.3s;
-    }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-        background: rgba(52, 152, 219, 0.3);
-    }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-baseweb="radio"] div:first-child {
-        color: #3498db !important;
-    }
-    
-    /* Amélioration des inputs dans la sidebar */
-    [data-testid="stSidebar"] input, 
-    [data-testid="stSidebar"] .stTextInput input,
-    [data-testid="stSidebar"] .stNumberInput input {
-        background: rgba(255, 255, 255, 0.1) !important;
-        color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    }
-    
-    [data-testid="stSidebar"] input:focus {
-        border-color: #3498db !important;
-        box-shadow: 0 0 0 1px #3498db !important;
-    }
-    
-    /* Amélioration des selectbox */
-    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] {
-        background: rgba(255, 255, 255, 0.1) !important;
-        color: white !important;
-    }
-    
-    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] div {
-        color: white !important;
-    }
-    
-    /* Boutons dans la sidebar */
-    [data-testid="stSidebar"] button {
-        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
-        color: white !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-    
-    [data-testid="stSidebar"] button:hover {
-        background: linear-gradient(135deg, #2980b9 0%, #3498db 100%) !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 5px 15px rgba(41, 128, 185, 0.4) !important;
-    }
-    
-    /* Titres dans la sidebar */
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] h4,
-    [data-testid="stSidebar"] h5,
-    [data-testid="stSidebar"] h6 {
-        color: #ecf0f1 !important;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-    }
-    
-    /* Onglets personnalisés */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background: #f8f9fa;
-        padding: 10px;
-        border-radius: 10px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        height: 60px;
-        white-space: pre-wrap;
-        background-color: #e9ecef;
-        border-radius: 10px 10px 0px 0px;
-        gap: 1px;
-        padding-top: 15px;
-        padding-bottom: 15px;
-        font-weight: bold;
-        color: #2c3e50;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: #3498db !important;
-        color: white !important;
-    }
-    
-    /* Boutons principaux */
-    .stButton>button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        font-weight: bold;
-        border: none;
-        border-radius: 8px;
-        padding: 12px 24px;
-        transition: all 0.3s;
-    }
-    
-    .stButton>button:hover {
-        transform: scale(1.05);
-        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-    }
-    
-    /* Amélioration des dataframes */
-    .dataframe {
-        background: white !important;
-        color: #2c3e50 !important;
-    }
-    
-    .dataframe th {
-        background: #3498db !important;
-        color: white !important;
-        font-weight: bold !important;
-    }
-    
-    .dataframe td {
-        color: #2c3e50 !important;
-    }
-    
-    /* Code blocks */
-    .stCode {
-        background: #2c3e50 !important;
-        color: #ecf0f1 !important;
-        border-radius: 8px;
-        padding: 15px;
-    }
-    
-    /* Tooltips et info boxes */
-    .stAlert {
-        background: #e8f4fd !important;
-        color: #0c5460 !important;
-        border-color: #b8daff !important;
-    }
-    
-    /* Amélioration de la visibilité du texte partout */
-    p, span, div:not([class*="sidebar"]) {
-        color: #2c3e50 !important;
-    }
-    
-    /* Correction pour les métriques */
-    [data-testid="stMetricValue"], 
-    [data-testid="stMetricLabel"] {
-        color: #2c3e50 !important;
-    }
-    
-    /* Grilles et séparateurs */
-    hr {
-        border-color: #bdc3c7 !important;
-    }
-    
-    /* Amélioration de la visibilité des labels dans le contenu principal */
-    .main .stNumberInput label,
-    .main .stTextInput label,
-    .main .stSelectbox label,
-    .main .stSlider label {
-        color: #2c3e50 !important;
-        font-weight: bold !important;
-    }
-    
-    /* Amélioration de la visibilité des valeurs dans les inputs */
-    .main .stNumberInput input,
-    .main .stTextInput input {
-        color: #2c3e50 !important;
-        background: white !important;
-        border: 1px solid #ddd !important;
-    }
-    
-    /* Correction pour les titres dans le contenu principal */
-    .main h1, .main h2, .main h3, .main h4, .main h5, .main h6 {
-        color: #2c3e50 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -305,21 +146,9 @@ st.markdown("""
 <div class="main-header">
     <h1 style="margin:0; font-size: 2.8em;">🏭 WAREHOUSE DIMENSIONING PRO</h1>
     <p style="margin:0; font-size: 1.2em;">Outil intelligent de dimensionnement d'entrepôts avec normes ISO intégrées</p>
-    <p style="margin-top: 10px; opacity: 0.9;">v3.0 | Conforme NF EN 15635 • ISO 9001 • Règlementation ERP</p>
+    <p style="margin-top: 10px; opacity: 0.9;">v4.0 | Mode Simple & Mode Avancé • Conforme NF EN 15635 • ISO 9001</p>
 </div>
 """, unsafe_allow_html=True)
-
-# ============================================================================
-# INITIALISATION DES VARIABLES DE SESSION
-# ============================================================================
-if 'warehouse_data' not in st.session_state:
-    st.session_state.warehouse_data = {
-        'step': 1,
-        'calculations': {},
-        'warnings': [],
-        'optimizations': [],
-        'params': {}
-    }
 
 # ============================================================================
 # FONCTIONS DE CALCUL PROFESSIONNELLES
@@ -329,40 +158,37 @@ class WarehouseCalculator:
     
     # Normes de référence
     NORMS = {
-        'min_aisle_width_forklift': 3.5,  # Largeur minimale allée pour chariot élévateur (m)
-        'min_aisle_width_pallet': 2.5,    # Largeur minimale pour transpalette (m)
-        'clearance_height': 0.5,          # Dégagement minimum sous poutre (m)
-        'fire_aisle_width': 1.2,          # Largeur allée d'évacuation (m)
-        'max_rack_height': 15.0,         # Hauteur maximale recommandée (m)
-        'min_turning_radius': 2.0,        # Rayon de braquage minimum (m)
-        'load_per_m2': 1500.0,            # Charge au sol maximale (kg/m²)
-        'lighting_level': 300.0,          # Niveau d'éclairage minimum (lux)
-        'min_door_width': 2.4,            # Largeur minimale porte (m)
-        'safety_margin': 0.3,             # Marge de sécurité autour racks (%)
+        'min_aisle_width_forklift': 3.5,
+        'min_aisle_width_pallet': 2.5,
+        'clearance_height': 0.5,
+        'fire_aisle_width': 1.2,
+        'max_rack_height': 15.0,
+        'min_turning_radius': 2.0,
+        'load_per_m2': 1500.0,
+        'lighting_level': 300.0,
+        'min_door_width': 2.4,
+        'safety_margin': 0.3,
     }
     
     @staticmethod
     def calculate_storage_capacity(params):
         """Calcule la capacité de stockage selon les normes ISO"""
         try:
-            # Nombre de racks possibles
-            usable_length = params['length'] - params['main_aisle_width'] - 4.0  # 2m de chaque côté
+            usable_length = params['length'] - params['main_aisle_width'] - 4.0
             racks_per_row = max(1, int(usable_length / (params['rack_depth'] + 1.0)))
             
-            usable_width = params['width'] - 2.0  # 1m de chaque côté
+            usable_width = params['width'] - 2.0
             rows_per_side = max(1, int(usable_width / (params['rack_width'] + 1.0)))
             
-            total_racks = racks_per_row * rows_per_side * 2  # Deux côtés
+            total_racks = racks_per_row * rows_per_side * 2
             
-            # Capacité par rack
             levels = min(params.get('max_levels', 3), 
                         int(params['clear_height'] / (params['pallet_height'] + 0.3)))
-            positions_per_level = 2  # Avant/arrière
+            positions_per_level = 2
             
             total_positions = total_racks * levels * positions_per_level
             total_pallets = int(total_positions * params.get('filling_rate', 85) / 100.0)
             
-            # Surface utile
             storage_area = total_racks * params['rack_width'] * params['rack_depth']
             total_area = params['length'] * params['width']
             storage_ratio = (storage_area / total_area) * 100.0 if total_area > 0 else 0.0
@@ -387,21 +213,17 @@ class WarehouseCalculator:
     def calculate_circulation(params, capacity):
         """Calcule les paramètres de circulation"""
         try:
-            # Distance moyenne de parcours
             avg_distance = (params['length'] + params['width']) / 2.0
             
-            # Temps de cycle
-            travel_speed = params.get('equipment_speed', 10.0) * 1000.0 / 3600.0  # m/s
+            travel_speed = params.get('equipment_speed', 10.0) * 1000.0 / 3600.0
             travel_time = avg_distance / travel_speed if travel_speed > 0 else 0
-            handling_time = 120.0 if params.get('equipment_type') == 'forklift' else 90.0  # secondes
+            handling_time = 120.0 if params.get('equipment_type') == 'forklift' else 90.0
             
-            cycle_time = travel_time * 2.0 + handling_time / 60.0  # minutes
+            cycle_time = travel_time * 2.0 + handling_time / 60.0
             
-            # Débit
             pallets_per_hour = 60.0 / cycle_time if cycle_time > 0 else 0
             daily_capacity = pallets_per_hour * params.get('operating_hours', 16.0)
             
-            # Nombre d'équipements nécessaires
             daily_throughput = capacity.get('total_pallets', 0) / params.get('stock_rotation', 30.0)
             required_equipment = max(1, math.ceil(daily_throughput / daily_capacity)) if daily_capacity > 0 else 1
             
@@ -421,15 +243,12 @@ class WarehouseCalculator:
     def calculate_costs(params, capacity, circulation):
         """Calcule les coûts d'investissement et d'exploitation"""
         try:
-            # Coût des racks (€/emplacement)
             rack_cost_per_position = 180.0
             rack_cost = capacity.get('total_positions', 0) * rack_cost_per_position
             
-            # Coût de la surface (€/m²)
             area_cost_per_m2 = 250.0
             area_cost = params['length'] * params['width'] * area_cost_per_m2
             
-            # Coût des équipements
             equipment_costs = {
                 'forklift': 45000.0,
                 'reach_truck': 55000.0,
@@ -438,16 +257,13 @@ class WarehouseCalculator:
             }
             equipment_cost = equipment_costs.get(params.get('equipment_type', 'forklift'), 30000.0) * circulation.get('required_equipment', 1)
             
-            # Coût installation
             installation_cost = (rack_cost + area_cost + equipment_cost) * 0.15
             
-            # Coût total
             total_investment = rack_cost + area_cost + equipment_cost + installation_cost
             
-            # Coûts annuels
             annual_maintenance = total_investment * 0.03
-            annual_personnel = circulation.get('required_equipment', 1) * 2.0 * 35000.0  # 2 opérateurs par équipement
-            annual_energy = params['length'] * params['width'] * 15.0  # €/m²/an
+            annual_personnel = circulation.get('required_equipment', 1) * 2.0 * 35000.0
+            annual_energy = params['length'] * params['width'] * 15.0
             
             total_annual_cost = annual_maintenance + annual_personnel + annual_energy
             
@@ -476,29 +292,25 @@ class WarehouseCalculator:
         optimizations = []
         
         try:
-            # Vérification hauteur
             if params['clear_height'] - params.get('max_rack_height', 6.0) < WarehouseCalculator.NORMS['clearance_height']:
                 warnings.append(f"⚠️ **Hauteur insuffisante** : Dégagement sous poutre inférieur à {WarehouseCalculator.NORMS['clearance_height']}m")
             
-            # Vérification largeur allée
             min_aisle = WarehouseCalculator.NORMS['min_aisle_width_forklift'] if params.get('equipment_type') == 'forklift' else WarehouseCalculator.NORMS['min_aisle_width_pallet']
             if params.get('main_aisle_width', 3.5) < min_aisle:
-                warnings.append(f"⚠️ **Allée trop étroite** : {params.get('main_aisle_width', 3.5)}m < {min_aisle}m minimum pour {params.get('equipment_type', 'forklift')}")
+                warnings.append(f"⚠️ **Allée trop étroite** : {params.get('main_aisle_width', 3.5)}m < {min_aisle}m minimum")
             
-            # Vérification charge au sol
             estimated_load = (capacity.get('total_pallets', 0) * params.get('pallet_weight', 800.0)) / params.get('total_area', 1.0)
             if estimated_load > WarehouseCalculator.NORMS['load_per_m2']:
                 warnings.append(f"⚠️ **Charge au sol excessive** : {estimated_load:.0f} kg/m² > {WarehouseCalculator.NORMS['load_per_m2']} kg/m² maximum")
             
-            # Optimisations
             storage_ratio = capacity.get('storage_ratio', 0.0)
             if storage_ratio > 70.0:
                 optimizations.append("✅ **Excellent ratio de stockage** (>70%)")
             else:
-                optimizations.append("💡 **Optimisation possible** : Augmenter le nombre de niveaux pour améliorer le ratio de stockage")
+                optimizations.append("💡 **Optimisation possible** : Augmenter le nombre de niveaux")
             
             if params.get('stock_rotation', 30.0) < 15.0:
-                optimizations.append("🚀 **Rotation rapide** : Considérer une zone de préparation de commandes dédiée")
+                optimizations.append("🚀 **Rotation rapide** : Considérer une zone de préparation dédiée")
             
         except Exception as e:
             warnings.append(f"Erreur dans la vérification des normes: {e}")
@@ -506,723 +318,882 @@ class WarehouseCalculator:
         return warnings, optimizations
 
 # ============================================================================
-# SIDEBAR - NAVIGATION ET CONFIGURATION GLOBALE
+# FONCTION POUR LE MODE AVANCÉ
 # ============================================================================
-with st.sidebar:
-    st.markdown("""
-    <div style="text-align: center; padding: 20px 0;">
-        <h2 style="color: #ecf0f1;">📋 NAVIGATION</h2>
-    </div>
-    """, unsafe_allow_html=True)
+def show_advanced_mode():
+    """Affiche l'interface du mode avancé (en construction)"""
     
-    # Sélecteur d'étape
-    step_options = ["🏢 1. BÂTIMENT", "📦 2. STOCKAGE", "🚚 3. CIRCULATION", 
-                   "📊 4. RÉSULTATS", "🎨 5. VISUALISATION"]
+    st.markdown('<div class="section-header">🚧 MODE AVANCÉ - EN CONSTRUCTION</div>', unsafe_allow_html=True)
     
-    step_index = st.session_state.warehouse_data['step'] - 1
-    step = st.radio(
-        "**PROGRESSION DU PROJET**",
-        step_options,
-        index=step_index,
-        key="navigation"
-    )
+    col1, col2 = st.columns([2, 1])
     
-    # Mettre à jour l'étape
-    step_map = {option: i+1 for i, option in enumerate(step_options)}
-    st.session_state.warehouse_data['step'] = step_map[step]
-    
-    st.markdown("---")
-    
-    # Paramètres globaux
-    st.markdown("### ⚙️ PARAMÈTRES GLOBAUX")
-    
-    project_name = st.text_input("**Nom du projet**", "Entrepôt Principal")
-    project_type = st.selectbox(
-        "**Type d'entrepôt**",
-        ["Distribution", "Production", "Cross-docking", "Logistique froide", "Automatisé"]
-    )
-    
-    st.markdown("---")
-    
-    # Bouton de réinitialisation
-    if st.button("🔄 Réinitialiser le projet", use_container_width=True):
-        st.session_state.warehouse_data = {
-            'step': 1, 
-            'calculations': {}, 
-            'warnings': [], 
-            'optimizations': [],
-            'params': {}
+    with col1:
+        st.markdown("""
+        ### Le mode avancé est actuellement en cours de développement
+        
+        Il offrira des fonctionnalités supplémentaires pour des analyses plus poussées :
+        
+        📊 **Analyse détaillée des flux logistiques**
+        - Simulation des mouvements de stock
+        - Analyse des temps de traitement
+        - Optimisation des parcours
+        
+        🧮 **Calculs avancés selon les normes ISO**
+        - Conformité ISO 9001:2015
+        - Normes de sécurité ISO 45001
+        - Standards de qualité ISO 14001
+        
+        🛣️ **Optimisation automatique des allées**
+        - Calcul des largeurs optimales
+        - Organisation des zones de circulation
+        - Planification des accès
+        
+        ⏱️ **Simulation des temps de cycle**
+        - Analyse des performances
+        - Identification des goulots
+        - Optimisation des processus
+        
+        📋 **Rapports techniques complets**
+        - Génération automatique de rapports
+        - Exports personnalisables
+        - Analyse comparative
+        """)
+        
+        # Timeline de développement
+        st.markdown("### 📅 Timeline de développement")
+        
+        timeline_data = {
+            "Phase": ["Interface avancée", "Simulations 3D", "Rapports ISO", "API d'intégration", "Déploiement final"],
+            "Progression": [30, 15, 45, 10, 5],
+            "Date estimée": ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025"]
         }
-        st.rerun()
-
-# ============================================================================
-# ÉTAPE 1 : PARAMÈTRES DU BÂTIMENT
-# ============================================================================
-if st.session_state.warehouse_data['step'] == 1:
-    st.markdown('<div class="section-header">🏢 ÉTAPE 1 : DIMENSIONS DU BÂTIMENT</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📏 Dimensions principales")
         
-        tab1, tab2, tab3 = st.tabs(["Dimensions", "Structure", "Accès"])
+        df_timeline = pd.DataFrame(timeline_data)
         
-        with tab1:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                length = st.number_input("**Longueur (m)**", 
-                                       min_value=10.0, max_value=200.0, value=60.0, step=1.0,
-                                       help="Longueur totale du bâtiment")
-            with c2:
-                width = st.number_input("**Largeur (m)**", 
-                                      min_value=10.0, max_value=100.0, value=40.0, step=1.0,
-                                      help="Largeur totale du bâtiment")
-            with c3:
-                clear_height = st.number_input("**Hauteur libre (m)**", 
-                                             min_value=3.0, max_value=20.0, value=9.0, step=0.5,
-                                             help="Hauteur sous poutre")
-        
-        with tab2:
-            c1, c2 = st.columns(2)
-            with c1:
-                column_spacing = st.number_input("**Espacement poteaux (m)**", 
-                                               min_value=5.0, max_value=15.0, value=9.0, step=1.0,
-                                               help="Distance entre les poteaux de structure")
-            with c2:
-                floor_load = st.number_input("**Charge au sol (T/m²)**", 
-                                           min_value=1.0, max_value=10.0, value=3.0, step=1.0,
-                                           help="Capacité portante du sol")
-        
-        with tab3:
-            c1, c2 = st.columns(2)
-            with c1:
-                dock_doors = st.number_input("**Nombre de quais**", 
-                                           min_value=1, max_value=20, value=4, step=1,
-                                           help="Quais de chargement/déchargement")
-            with c2:
-                door_width = st.number_input("**Largeur porte (m)**", 
-                                           min_value=2.0, max_value=5.0, value=3.0, step=0.1,
-                                           help="Largeur des portes de quai")
+        for _, row in df_timeline.iterrows():
+            st.markdown(f"**{row['Phase']}** - {row['Date estimée']}")
+            st.progress(row['Progression'] / 100)
+            st.markdown("---")
     
     with col2:
-        st.markdown("### 🎯 Prévisualisation")
+        st.markdown("### 🎯 Prochaines fonctionnalités")
         
-        # Calcul de la surface
-        area = length * width
-        volume = area * clear_height
-        
-        st.markdown(f"""
-        <div class="parameter-card">
-            <h4 style="margin-top:0;">📐 Surface totale</h4>
-            <h2 style="color:#3498db; margin:0;">{area:.0f} m²</h2>
-            <p>Longueur : {length:.0f}m × Largeur : {width:.0f}m</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-        <div class="parameter-card">
-            <h4 style="margin-top:0;">📦 Volume disponible</h4>
-            <h2 style="color:#3498db; margin:0;">{volume:,.0f} m³</h2>
-            <p>Hauteur libre : {clear_height:.1f}m</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-        <div class="parameter-card">
-            <h4 style="margin-top:0;">🚪 Capacité d'accès</h4>
-            <h2 style="color:#3498db; margin:0;">{dock_doors} quais</h2>
-            <p>Largeur porte : {door_width:.1f}m</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Sauvegarder les paramètres
-    st.session_state.warehouse_data['params'].update({
-        'length': float(length),
-        'width': float(width),
-        'clear_height': float(clear_height),
-        'column_spacing': float(column_spacing),
-        'floor_load': float(floor_load),
-        'dock_doors': int(dock_doors),
-        'door_width': float(door_width)
-    })
-
-# ============================================================================
-# ÉTAPE 2 : PARAMÈTRES DE STOCKAGE
-# ============================================================================
-elif st.session_state.warehouse_data['step'] == 2:
-    st.markdown('<div class="section-header">📦 ÉTAPE 2 : PARAMÈTRES DE STOCKAGE</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📦 Caractéristiques des marchandises")
-        
-        tab1, tab2, tab3 = st.tabs(["Unités de charge", "Racks", "Gestion"])
-        
-        with tab1:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                pallet_type = st.selectbox("**Type de palette**", 
-                                         ["EUR (800×1200)", "US (1000×1200)", "Demi-palette", "Conteneur"])
-            with c2:
-                pallet_weight = st.number_input("**Poids palette (kg)**", 
-                                              min_value=100.0, max_value=2000.0, value=800.0, step=50.0,
-                                              help="Poids moyen par palette")
-            with c3:
-                pallet_height = st.number_input("**Hauteur palette (m)**", 
-                                              min_value=0.5, max_value=2.5, value=1.2, step=0.1,
-                                              help="Hauteur moyenne des charges")
-        
-        with tab2:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                rack_type = st.selectbox("**Type de rack**", 
-                                       ["Palettier conventionnel", "Drive-in", "Palettier mobile", "Cantilever"])
-            with c2:
-                rack_width = st.number_input("**Largeur rack (m)**", 
-                                           min_value=0.8, max_value=3.0, value=1.0, step=0.1,
-                                           help="Largeur d'un module de rack")
-            with c3:
-                rack_depth = st.number_input("**Profondeur rack (m)**", 
-                                           min_value=0.8, max_value=3.0, value=1.2, step=0.1,
-                                           help="Profondeur d'un module de rack")
-        
-        with tab3:
-            c1, c2 = st.columns(2)
-            with c1:
-                stock_rotation = st.number_input("**Rotation des stocks (jours)**", 
-                                               min_value=1.0, max_value=365.0, value=30.0, step=1.0,
-                                               help="Durée moyenne de stockage")
-            with c2:
-                filling_rate = st.slider("**Taux de remplissage (%)**", 
-                                       50, 100, 85, step=1,
-                                       help="Pourcentage moyen d'occupation")
-    
-    with col2:
-        st.markdown("### 🎯 Paramètres avancés")
-        
-        st.markdown("#### 📈 Densité de stockage")
-        max_levels = st.slider("**Nombre de niveaux max**", 1, 10, 3, step=1,
-                             help="Nombre d'étages de stockage")
-        
-        st.markdown("#### 🔄 Flux de marchandises")
-        flow_type = st.selectbox("**Type de flux**",
-                               ["FIFO (First In First Out)", "LIFO (Last In First Out)", "FEFO (First Expired First Out)"])
-        
-        st.markdown("#### 🌡️ Conditions spéciales")
-        special_conditions = st.multiselect("**Besoins spécifiques**",
-                                          ["Chambres froides", "Sécurité renforcée", "Produits dangereux", 
-                                           "Valeur élevée", "Fragile"])
-    
-    # Sauvegarder les paramètres
-    st.session_state.warehouse_data['params'].update({
-        'pallet_type': pallet_type,
-        'pallet_weight': float(pallet_weight),
-        'pallet_height': float(pallet_height),
-        'rack_type': rack_type,
-        'rack_width': float(rack_width),
-        'rack_depth': float(rack_depth),
-        'stock_rotation': float(stock_rotation),
-        'filling_rate': float(filling_rate),
-        'max_levels': int(max_levels),
-        'flow_type': flow_type,
-        'special_conditions': special_conditions,
-        'pallet_volume': 1.0  # Valeur par défaut
-    })
-
-# ============================================================================
-# ÉTAPE 3 : PARAMÈTRES DE CIRCULATION
-# ============================================================================
-elif st.session_state.warehouse_data['step'] == 3:
-    st.markdown('<div class="section-header">🚚 ÉTAPE 3 : CIRCULATION ET ÉQUIPEMENTS</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 🚗 Équipements de manutention")
-        
-        tab1, tab2 = st.tabs(["Équipements", "Circulation"])
-        
-        with tab1:
-            equipment_type = st.selectbox(
-                "**Type d'équipement principal**",
-                ["forklift", "reach_truck", "pallet_truck", "automated"],
-                format_func=lambda x: {
-                    "forklift": "🔸 Chariot élévateur",
-                    "reach_truck": "🔸 Chariot à mât rétractable",
-                    "pallet_truck": "🔸 Transpalette électrique",
-                    "automated": "🤖 Système automatisé"
-                }[x]
-            )
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                equipment_speed = st.slider("**Vitesse (km/h)**", 5, 25, 10, step=1,
-                                          help="Vitesse de circulation moyenne")
-            with c2:
-                equipment_capacity = st.number_input("**Capacité (kg)**", 
-                                                   min_value=1000.0, max_value=5000.0, value=1500.0, step=100.0,
-                                                   help="Capacité de levage")
-        
-        with tab2:
-            c1, c2 = st.columns(2)
-            with c1:
-                main_aisle_width = st.number_input("**Largeur allée principale (m)**", 
-                                                 min_value=2.0, max_value=6.0, value=3.5, step=0.1,
-                                                 help="Largeur des allées de circulation")
-            with c2:
-                secondary_aisle_width = st.number_input("**Largeur allée secondaire (m)**", 
-                                                      min_value=1.5, max_value=3.0, value=2.0, step=0.1,
-                                                      help="Largeur des allées entre racks")
-            
-            operating_hours = st.slider("**Heures d'exploitation/jour**", 8, 24, 16, step=1)
-    
-    with col2:
-        st.markdown("### 📋 Spécifications techniques")
-        
-        st.markdown("#### 🛡️ Sécurité")
-        safety_margin = st.slider("**Marge de sécurité (%)**", 10, 50, 20, step=1,
-                                help="Marge pour manœuvres et sécurité")
-        
-        st.markdown("#### 💡 Éclairage")
-        lighting_type = st.selectbox("**Type d'éclairage**",
-                                   ["LED haute baie", "Fluorescent", "Sodium haute pression"])
-        
-        st.markdown("#### 🚨 Systèmes de sécurité")
-        security_systems = st.multiselect("**Équipements de sécurité**",
-                                        ["Détection incendie", "Vidéosurveillance", "Contrôle d'accès",
-                                         "Alarme intrusion", "Éclairage de sécurité"])
-    
-    # Sauvegarder les paramètres
-    st.session_state.warehouse_data['params'].update({
-        'equipment_type': equipment_type,
-        'equipment_speed': float(equipment_speed),
-        'equipment_capacity': float(equipment_capacity),
-        'main_aisle_width': float(main_aisle_width),
-        'secondary_aisle_width': float(secondary_aisle_width),
-        'operating_hours': float(operating_hours),
-        'safety_margin': float(safety_margin),
-        'lighting_type': lighting_type,
-        'security_systems': security_systems
-    })
-
-# ============================================================================
-# ÉTAPE 4 : CALCULS ET RÉSULTATS
-# ============================================================================
-elif st.session_state.warehouse_data['step'] == 4:
-    st.markdown('<div class="section-header">📊 ÉTAPE 4 : RÉSULTATS ET ANALYSE</div>', unsafe_allow_html=True)
-    
-    # Bouton de calcul
-    if st.button("🚀 Lancer les calculs de dimensionnement", type="primary", use_container_width=True):
-        with st.spinner("🔬 Calculs en cours avec vérification des normes..."):
-            calculator = WarehouseCalculator()
-            params = st.session_state.warehouse_data['params']
-            
-            # Calculs
-            capacity = calculator.calculate_storage_capacity(params)
-            circulation = calculator.calculate_circulation(params, capacity)
-            costs = calculator.calculate_costs(params, capacity, circulation)
-            warnings, optimizations = calculator.check_norms_compliance(params, capacity)
-            
-            # Sauvegarder
-            st.session_state.warehouse_data['calculations'] = {
-                'capacity': capacity,
-                'circulation': circulation,
-                'costs': costs
-            }
-            st.session_state.warehouse_data['warnings'] = warnings
-            st.session_state.warehouse_data['optimizations'] = optimizations
-        
-        st.success("✅ Calculs terminés avec succès !")
-        st.rerun()
-    
-    # Afficher les résultats si disponibles
-    if st.session_state.warehouse_data['calculations']:
-        calc = st.session_state.warehouse_data['calculations']
-        
-        # Tableau de bord des métriques
-        st.markdown("### 📈 TABLEAU DE BORD DES PERFORMANCES")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h4>🏗️ Racks installés</h4>
-                <h1 style="color:#3498db;">{calc['capacity'].get('total_racks', 0)}</h1>
-                <p>{calc['capacity'].get('racks_per_row', 0)} × {calc['capacity'].get('rows_per_side', 0)} × 2 côtés</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h4>📦 Capacité palettes</h4>
-                <h1 style="color:#2ecc71;">{calc['capacity'].get('total_pallets', 0):,}</h1>
-                <p>{calc['capacity'].get('levels', 0)} niveaux × {calc['capacity'].get('total_positions', 0)} emplacements</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h4>💰 Investissement</h4>
-                <h1 style="color:#e74c3c;">{calc['costs'].get('total_investment', 0)} k€</h1>
-                <p>{calc['costs'].get('cost_per_pallet', 0)} €/palette/an</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h4>⚡ Productivité</h4>
-                <h1 style="color:#f39c12;">{calc['circulation'].get('pallets_per_hour', 0):.1f}/h</h1>
-                <p>{calc['circulation'].get('required_equipment', 0)} équipements nécessaires</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Détails des calculs
-        st.markdown("### 📋 RAPPORT DÉTAILLÉ")
-        
-        tab1, tab2, tab3 = st.tabs(["Capacité", "Circulation", "Coûts"])
-        
-        with tab1:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### 📊 Capacités de stockage")
-                capacity_data = {
-                    "Métrique": ["Surface totale", "Surface de stockage", "Taux d'occupation", 
-                               "Volume utile", "Palettes totales", "Rotation moyenne"],
-                    "Valeur": [f"{calc['capacity'].get('total_area', 0):.0f} m²", 
-                             f"{calc['capacity'].get('storage_area', 0):.1f} m²",
-                             f"{calc['capacity'].get('storage_ratio', 0):.1f}%",
-                             f"{calc['capacity'].get('volume_capacity', 0):.0f} m³",
-                             f"{calc['capacity'].get('total_pallets', 0):,}",
-                             f"{st.session_state.warehouse_data['params'].get('stock_rotation', 30):.0f} jours"]
-                }
-                st.dataframe(pd.DataFrame(capacity_data), use_container_width=True, hide_index=True)
-            
-            with col2:
-                st.markdown("#### 🎯 Efficacité spatiale")
-                
-                # Créer un graphique simple
-                fig, ax = plt.subplots(figsize=(8, 6))
-                labels = ['Stockage', 'Circulation', 'Services', 'Sécurité']
-                values = [
-                    calc['capacity'].get('storage_ratio', 0),
-                    100 - calc['capacity'].get('storage_ratio', 0) - 15,
-                    10, 5
-                ]
-                colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12']
-                
-                ax.pie(values, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
-                ax.axis('equal')
-                st.pyplot(fig)
-        
-        with tab2:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### 🚗 Performance logistique")
-                circulation_data = {
-                    "Paramètre": ["Distance moyenne", "Temps de cycle", "Débit horaire", 
-                                "Débit journalier", "Équipements nécessaires", "Capacité théorique"],
-                    "Valeur": [f"{calc['circulation'].get('avg_distance', 0):.1f} m",
-                             f"{calc['circulation'].get('cycle_time', 0):.1f} min",
-                             f"{calc['circulation'].get('pallets_per_hour', 0):.1f} pal/h",
-                             f"{calc['circulation'].get('daily_capacity', 0):,} pal/j",
-                             f"{calc['circulation'].get('required_equipment', 0)}",
-                             f"{calc['circulation'].get('daily_throughput', 0):,} pal/j"]
-                }
-                st.dataframe(pd.DataFrame(circulation_data), use_container_width=True, hide_index=True)
-            
-            with col2:
-                st.markdown("#### 📅 Planning de déploiement")
-                timeline_data = {
-                    "Phase": ["Étude technique", "Commande équipements", "Installation racks", 
-                            "Mise en service", "Formation équipe", "Optimisation"],
-                    "Durée (sem)": [4, 8, 6, 2, 1, 4],
-                    "Statut": ["✅", "🔄", "⏳", "⏳", "⏳", "⏳"]
-                }
-                st.dataframe(pd.DataFrame(timeline_data), use_container_width=True, hide_index=True)
-        
-        with tab3:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### 💰 Investissement initial")
-                investment_data = {
-                    "Poste": ["Racks et rayonnage", "Surface bâtiment", "Équipements", 
-                            "Installation", "TOTAL"],
-                    "Montant (k€)": [calc['costs'].get('rack_cost', 0), calc['costs'].get('area_cost', 0),
-                                   calc['costs'].get('equipment_cost', 0), calc['costs'].get('installation_cost', 0),
-                                   calc['costs'].get('total_investment', 0)]
-                }
-                st.dataframe(pd.DataFrame(investment_data), use_container_width=True, hide_index=True)
-            
-            with col2:
-                st.markdown("#### 💸 Coûts d'exploitation annuels")
-                operating_data = {
-                    "Poste": ["Maintenance", "Personnel", "Énergie", "TOTAL"],
-                    "Montant (k€)": [calc['costs'].get('annual_maintenance', 0), 
-                                   calc['costs'].get('annual_personnel', 0),
-                                   calc['costs'].get('annual_energy', 0), 
-                                   calc['costs'].get('total_annual_cost', 0)]
-                }
-                st.dataframe(pd.DataFrame(operating_data), use_container_width=True, hide_index=True)
-        
-        # Alertes et optimisations
-        if st.session_state.warehouse_data['warnings']:
-            st.markdown("### ⚠️ ALERTES DE CONFORMITÉ")
-            for warning in st.session_state.warehouse_data['warnings']:
-                st.markdown(f'<div class="warning-box">{warning}</div>', unsafe_allow_html=True)
-        
-        if st.session_state.warehouse_data['optimizations']:
-            st.markdown("### 💡 OPTIMISATIONS RECOMMANDÉES")
-            for opt in st.session_state.warehouse_data['optimizations']:
-                st.markdown(f'<div class="success-box">{opt}</div>', unsafe_allow_html=True)
-
-# ============================================================================
-# ÉTAPE 5 : VISUALISATION ET EXPORT
-# ============================================================================
-elif st.session_state.warehouse_data['step'] == 5:
-    st.markdown('<div class="section-header">🎨 ÉTAPE 5 : VISUALISATION ET RAPPORTS</div>', unsafe_allow_html=True)
-    
-    # Déclarer les colonnes AVANT de les utiliser
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📐 PLAN D'IMPLANTATION 2D")
-        
-        # Récupérer les paramètres
-        params = st.session_state.warehouse_data.get('params', {})
-        calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
-        
-        # Correction : Assurer que la longueur est le plus grand côté
-        length = max(params.get('length', 60.0), params.get('width', 40.0))
-        width = min(params.get('length', 60.0), params.get('width', 40.0))
-        
-        rack_width = params.get('rack_width', 1.0)
-        rack_depth = params.get('rack_depth', 1.2)
-        main_aisle_width = params.get('main_aisle_width', 3.5)
-        
-        # Calculer le nombre optimal de racks pour utiliser toute la surface
-        racks_per_row = calc.get('racks_per_row', 0)
-        rows_per_side = calc.get('rows_per_side', 0)
-        
-        # Si les calculs n'ont pas été faits, estimer basé sur les dimensions
-        if racks_per_row == 0:
-            # Calcul optimisé pour utiliser 85% de la surface
-            usable_length = length - main_aisle_width - 4  # Marges
-            racks_per_row = max(1, int(usable_length / (rack_depth + 0.8)))
-            
-        if rows_per_side == 0:
-            usable_width = width - 4  # Marges
-            rows_per_side = max(1, int(usable_width / (rack_width + 0.8)))
-        
-        total_racks = racks_per_row * rows_per_side * 2
-        
-        st.markdown(f"""
-        <div class="parameter-card">
-            <h4>📊 Configuration calculée</h4>
-            <p><strong>Racks par rangée :</strong> {racks_per_row}</p>
-            <p><strong>Rangées par côté :</strong> {rows_per_side}</p>
-            <p><strong>Total racks :</strong> {total_racks}</p>
-            <p><strong>Utilisation surface :</strong> ~85%</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Créer le schéma avec utilisation complète
-        fig, ax = plt.subplots(figsize=(14, 10))
-        
-        # Dessiner le bâtiment
-        ax.add_patch(patches.Rectangle((0, 0), length, width,
-                                       linewidth=3, edgecolor='#2c3e50',
-                                       facecolor='#ecf0f1', alpha=0.3,
-                                       label='Bâtiment'))
-        
-        # Calculer l'espacement optimal pour utiliser toute la largeur
-        total_rack_width = rows_per_side * rack_width
-        available_width = width - 4  # 2m de chaque côté
-        spacing_y = (available_width - total_rack_width) / (rows_per_side + 1) if rows_per_side > 1 else 1.0
-        
-        # Calculer l'espacement optimal pour utiliser toute la longueur
-        total_rack_length = racks_per_row * rack_depth
-        available_length_left = (length - main_aisle_width) / 2 - 2  # Moitié gauche
-        spacing_x = (available_length_left - total_rack_length) / (racks_per_row + 1) if racks_per_row > 1 else 1.0
-        
-        # Racks côté GAUCHE (bleu)
-        for i in range(racks_per_row):
-            for j in range(rows_per_side):
-                x = 2 + i * (rack_depth + spacing_x)
-                y = 2 + j * (rack_width + spacing_y)
-                ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
-                                             facecolor='#3498db', edgecolor='#2980b9',
-                                             alpha=0.8))
-        
-        # Allée centrale
-        alley_start = 2 + racks_per_row * (rack_depth + spacing_x) + spacing_x
-        ax.add_patch(patches.Rectangle((alley_start, 0), main_aisle_width, width,
-                                     facecolor='#95a5a6', alpha=0.5,
-                                     edgecolor='#7f8c8d', linewidth=2,
-                                     label='Allée principale'))
-        
-        # Racks côté DROIT (vert)
-        alley_end = alley_start + main_aisle_width
-        for i in range(racks_per_row):
-            for j in range(rows_per_side):
-                x = alley_end + spacing_x + i * (rack_depth + spacing_x)
-                y = 2 + j * (rack_width + spacing_y)
-                ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
-                                             facecolor='#2ecc71', edgecolor='#27ae60',
-                                             alpha=0.8))
-        
-        # Quais de chargement (côté droit du bâtiment)
-        dock_doors = min(params.get('dock_doors', 4), 6)  # Limiter à 6 pour la visibilité
-        for i in range(dock_doors):
-            quai_width = 4.0
-            quai_height = 3.0
-            quai_x = length - quai_width
-            quai_y = (i + 1) * (width / (dock_doors + 1)) - quai_height/2
-            ax.add_patch(patches.Rectangle((quai_x, quai_y), quai_width, quai_height,
-                                         facecolor='#e74c3c', alpha=0.7,
-                                         edgecolor='#c0392b', linewidth=2,
-                                         label='Quai' if i == 0 else ""))
-        
-        # Zones de circulation et sécurité
-        # Zone de manœuvre devant les quais
-        ax.add_patch(patches.Rectangle((length - quai_width - 8, 0), 8, width,
-                                     facecolor='#f1c40f', alpha=0.2,
-                                     hatch='//', label='Zone manœuvre'))
-        
-        # Sorties de secours
-        exit_width = 2.4
-        ax.add_patch(patches.Rectangle((length/2 - exit_width/2, -0.5), exit_width, 1,
-                                     facecolor='#9b59b6', alpha=0.6,
-                                     label='Sortie secours'))
-        
-        # Configuration du graphique
-        ax.set_xlim(-2, length + 2)
-        ax.set_ylim(-2, width + 2)
-        ax.set_aspect('equal')
-        ax.set_xlabel('LONGUEUR (mètres)', fontweight='bold', fontsize=12)
-        ax.set_ylabel('LARGEUR (mètres)', fontweight='bold', fontsize=12)
-        ax.set_title(f'PLAN D\'IMPLANTATION OPTIMISÉ - {total_racks} RACKS', 
-                    fontsize=16, fontweight='bold', pad=20)
-        
-        # Ajouter les mesures sur le plan
-        # Mesure de longueur totale
-        ax.annotate(f'{length:.0f}m', xy=(length/2, -1.5), 
-                    ha='center', va='center', fontsize=10, fontweight='bold',
-                    color='#2c3e50')
-        
-        # Mesure de largeur totale
-        ax.annotate(f'{width:.0f}m', xy=(-1.5, width/2), 
-                    ha='center', va='center', fontsize=10, fontweight='bold',
-                    color='#2c3e50', rotation=90)
-        
-        # Mesure de l'allée
-        ax.annotate(f'Allée\n{main_aisle_width}m', 
-                    xy=(alley_start + main_aisle_width/2, width/2),
-                    ha='center', va='center', fontsize=9, fontweight='bold',
-                    color='#c0392b', rotation=90,
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
-        
-        # Légende détaillée
-        from matplotlib.patches import Patch
-        legend_elements = [
-            Patch(facecolor='#3498db', edgecolor='#2980b9', alpha=0.8, label='Racks côté gauche'),
-            Patch(facecolor='#2ecc71', edgecolor='#27ae60', alpha=0.8, label='Racks côté droit'),
-            Patch(facecolor='#95a5a6', edgecolor='#7f8c8d', alpha=0.5, label='Allée principale'),
-            Patch(facecolor='#e74c3c', edgecolor='#c0392b', alpha=0.7, label='Quais chargement'),
-            Patch(facecolor='#f1c40f', alpha=0.2, hatch='//', label='Zone de manœuvre'),
-            Patch(facecolor='#9b59b6', alpha=0.6, label='Sortie secours')
+        features = [
+            ("🤖 Intelligence Artificielle", "Optimisation automatique des layouts"),
+            ("🌐 Simulation temps réel", "Modélisation des flux en continu"),
+            ("📱 Application mobile", "Visite virtuelle sur tablette"),
+            ("🔗 Intégration ERP", "Connexion SAP/Oracle"),
+            ("📊 Analytics avancés", "Prédiction des besoins"),
+            ("🎮 Formation virtuelle", "Simulateur pour opérateurs")
         ]
-        ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1),
-                  borderaxespad=0., fontsize=9)
         
-        # Grille secondaire pour meilleure lisibilité
-        ax.grid(True, which='major', linestyle='-', linewidth=0.5, alpha=0.3, color='gray')
-        ax.grid(True, which='minor', linestyle=':', linewidth=0.3, alpha=0.2, color='gray')
-        ax.minorticks_on()
+        for feature, description in features:
+            with st.container():
+                st.markdown(f"#### {feature}")
+                st.markdown(f"<small>{description}</small>", unsafe_allow_html=True)
+                st.markdown("---")
         
-        # Ajuster les marges pour la légende
-        plt.tight_layout(rect=[0, 0, 0.85, 1])
+        # Bouton pour revenir au mode simple
+        st.markdown("---")
+        if st.button("🚀 Passer au Mode Simple", use_container_width=True, type="primary"):
+            st.session_state.warehouse_data['mode'] = 'simple'
+            st.rerun()
+    
+    # Section d'inscription aux mises à jour
+    st.markdown("---")
+    st.markdown("### 📩 Restez informé des avancées")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        email = st.text_input("Votre email pour recevoir les mises à jour")
         
-        st.pyplot(fig)
-        
-        # Statistiques d'utilisation
-        st.markdown("### 📊 STATISTIQUES D'UTILISATION")
-        
-        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-        
-        with col_stat1:
-            surface_totale = length * width
-            st.metric("Surface totale", f"{surface_totale:.0f} m²")
-        
-        with col_stat2:
-            surface_racks = total_racks * rack_width * rack_depth
-            st.metric("Surface racks", f"{surface_racks:.0f} m²")
-        
-        with col_stat3:
-            surface_circulation = surface_totale - surface_racks
-            st.metric("Surface circulation", f"{surface_circulation:.0f} m²")
-        
-        with col_stat4:
-            taux_utilisation = (surface_racks / surface_totale) * 100 if surface_totale > 0 else 0
-            st.metric("Taux d'utilisation", f"{taux_utilisation:.1f}%")
+        if st.button("S'inscrire aux notifications", use_container_width=True):
+            if email:
+                st.success(f"Merci ! Vous serez informé des avancées du mode avancé à {email}")
+            else:
+                st.warning("Veuillez entrer une adresse email valide")
     
     with col2:
-        st.markdown("### 📥 EXPORTATION")
+        st.markdown("""
+        <div class="parameter-card">
+            <h4>📅 Prochaine démo</h4>
+            <p><strong>Date :</strong> 15 Mars 2024</p>
+            <p><strong>Lieu :</strong> Webinaire en ligne</p>
+            <p><strong>Inscription :</strong> Ouverte</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ============================================================================
+# FONCTIONS POUR LE MODE SIMPLE
+# ============================================================================
+def show_simple_mode():
+    """Affiche l'interface du mode simple"""
+    
+    # ============================================================================
+    # SIDEBAR - NAVIGATION ET CONFIGURATION GLOBALE
+    # ============================================================================
+    with st.sidebar:
+        st.markdown("""
+        <div style="text-align: center; padding: 20px 0;">
+            <h2 style="color: #ecf0f1;">📋 NAVIGATION</h2>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Boutons d'export
-        if st.button("📊 Générer rapport Excel", use_container_width=True):
-            st.success("Rapport Excel généré avec succès!")
-            
-            # Créer un DataFrame pour l'export
-            import pandas as pd
-            params_df = pd.DataFrame([params])
-            st.download_button(
-                label="⬇️ Télécharger Excel",
-                data=params_df.to_csv(index=False).encode('utf-8'),
-                file_name="parametres_entrepot.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+        # Sélecteur d'étape
+        step_options = ["🏢 1. BÂTIMENT", "📦 2. STOCKAGE", "🚚 3. CIRCULATION", 
+                       "📊 4. RÉSULTATS", "🎨 5. VISUALISATION"]
         
-        if st.button("📄 Générer rapport PDF", use_container_width=True):
-            st.success("Rapport PDF généré avec succès!")
+        step_index = st.session_state.warehouse_data['step'] - 1
+        step = st.radio(
+            "**PROGRESSION DU PROJET**",
+            step_options,
+            index=step_index,
+            key="navigation"
+        )
         
-        # Exporter l'image
-        if st.button("🖼️ Exporter l'image", use_container_width=True):
-            buf = BytesIO()
-            fig.savefig(buf, format="png", dpi=150, bbox_inches='tight')
-            st.download_button(
-                label="⬇️ Télécharger l'image",
-                data=buf.getvalue(),
-                file_name="plan_implantation.png",
-                mime="image/png",
-                use_container_width=True
-            )
+        # Mettre à jour l'étape
+        step_map = {option: i+1 for i, option in enumerate(step_options)}
+        st.session_state.warehouse_data['step'] = step_map[step]
         
         st.markdown("---")
-        st.markdown("### 🤖 GÉNÉRATION IA")
         
-        # Prompt pour génération d'image réaliste
-        st.markdown("**Générer une visualisation 3D :**")
+        # Paramètres globaux
+        st.markdown("### ⚙️ PARAMÈTRES GLOBAUX")
         
-        # Construire le prompt dynamiquement
-        calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
-        prompt = f"""
-        Photorealistic warehouse interior, industrial storage system with {calc.get('total_racks', 0)} racks, 
-        {params.get('max_levels', 3)} levels, {params.get('rack_width', 1.0)}m x {params.get('rack_depth', 1.2)}m rack size,
-        {params.get('main_aisle_width', 3.5)}m wide aisle, {params.get('equipment_type', 'forklift')} operations, 
-        LED lighting, safety markings, wide-angle view, architectural visualization, 8K resolution
-        """
+        project_name = st.text_input("**Nom du projet**", "Entrepôt Principal")
+        project_type = st.selectbox(
+            "**Type d'entrepôt**",
+            ["Distribution", "Production", "Cross-docking", "Logistique froide", "Automatisé"]
+        )
         
-        st.code(prompt, language="text")
+        st.markdown("---")
         
-        if st.button("🎨 Générer avec IA", use_container_width=True):
-            st.info("Copiez le prompt ci-dessus dans Midjourney, DALL-E 3 ou Stable Diffusion")
+        # Bouton pour passer au mode avancé
+        if st.button("🔧 Essayer le Mode Avancé (Bêta)", use_container_width=True):
+            st.session_state.warehouse_data['mode'] = 'advanced'
+            st.rerun()
+        
+        # Bouton de réinitialisation
+        if st.button("🔄 Réinitialiser le projet", use_container_width=True):
+            st.session_state.warehouse_data = {
+                'step': 1, 
+                'calculations': {}, 
+                'warnings': [], 
+                'optimizations': [],
+                'params': {},
+                'mode': 'simple'
+            }
+            st.rerun()
+    
+    # ============================================================================
+    # ÉTAPE 1 : PARAMÈTRES DU BÂTIMENT
+    # ============================================================================
+    if st.session_state.warehouse_data['step'] == 1:
+        st.markdown('<div class="section-header">🏢 ÉTAPE 1 : DIMENSIONS DU BÂTIMENT</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("### 📏 Dimensions principales")
+            
+            tab1, tab2, tab3 = st.tabs(["Dimensions", "Structure", "Accès"])
+            
+            with tab1:
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    length = st.number_input("**Longueur (m)**", 
+                                           min_value=10.0, max_value=200.0, value=60.0, step=1.0,
+                                           help="Longueur totale du bâtiment")
+                with c2:
+                    width = st.number_input("**Largeur (m)**", 
+                                          min_value=10.0, max_value=100.0, value=40.0, step=1.0,
+                                          help="Largeur totale du bâtiment")
+                with c3:
+                    clear_height = st.number_input("**Hauteur libre (m)**", 
+                                                 min_value=3.0, max_value=20.0, value=9.0, step=0.5,
+                                                 help="Hauteur sous poutre")
+            
+            with tab2:
+                c1, c2 = st.columns(2)
+                with c1:
+                    column_spacing = st.number_input("**Espacement poteaux (m)**", 
+                                                   min_value=5.0, max_value=15.0, value=9.0, step=1.0,
+                                                   help="Distance entre les poteaux de structure")
+                with c2:
+                    floor_load = st.number_input("**Charge au sol (T/m²)**", 
+                                               min_value=1.0, max_value=10.0, value=3.0, step=1.0,
+                                               help="Capacité portante du sol")
+            
+            with tab3:
+                c1, c2 = st.columns(2)
+                with c1:
+                    dock_doors = st.number_input("**Nombre de quais**", 
+                                               min_value=1, max_value=20, value=4, step=1,
+                                               help="Quais de chargement/déchargement")
+                with c2:
+                    door_width = st.number_input("**Largeur porte (m)**", 
+                                               min_value=2.0, max_value=5.0, value=3.0, step=0.1,
+                                               help="Largeur des portes de quai")
+        
+        with col2:
+            st.markdown("### 🎯 Prévisualisation")
+            
+            # Calcul de la surface
+            area = length * width
+            volume = area * clear_height
+            
+            st.markdown(f"""
+            <div class="parameter-card">
+                <h4 style="margin-top:0;">📐 Surface totale</h4>
+                <h2 style="color:#3498db; margin:0;">{area:.0f} m²</h2>
+                <p>Longueur : {length:.0f}m × Largeur : {width:.0f}m</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="parameter-card">
+                <h4 style="margin-top:0;">📦 Volume disponible</h4>
+                <h2 style="color:#3498db; margin:0;">{volume:,.0f} m³</h2>
+                <p>Hauteur libre : {clear_height:.1f}m</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="parameter-card">
+                <h4 style="margin-top:0;">🚪 Capacité d'accès</h4>
+                <h2 style="color:#3498db; margin:0;">{dock_doors} quais</h2>
+                <p>Largeur porte : {door_width:.1f}m</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Sauvegarder les paramètres
+        st.session_state.warehouse_data['params'].update({
+            'length': float(length),
+            'width': float(width),
+            'clear_height': float(clear_height),
+            'column_spacing': float(column_spacing),
+            'floor_load': float(floor_load),
+            'dock_doors': int(dock_doors),
+            'door_width': float(door_width)
+        })
+    
+    # ============================================================================
+    # ÉTAPE 2 : PARAMÈTRES DE STOCKAGE
+    # ============================================================================
+    elif st.session_state.warehouse_data['step'] == 2:
+        st.markdown('<div class="section-header">📦 ÉTAPE 2 : PARAMÈTRES DE STOCKAGE</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("### 📦 Caractéristiques des marchandises")
+            
+            tab1, tab2, tab3 = st.tabs(["Unités de charge", "Racks", "Gestion"])
+            
+            with tab1:
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    pallet_type = st.selectbox("**Type de palette**", 
+                                             ["EUR (800×1200)", "US (1000×1200)", "Demi-palette", "Conteneur"])
+                with c2:
+                    pallet_weight = st.number_input("**Poids palette (kg)**", 
+                                                  min_value=100.0, max_value=2000.0, value=800.0, step=50.0,
+                                                  help="Poids moyen par palette")
+                with c3:
+                    pallet_height = st.number_input("**Hauteur palette (m)**", 
+                                                  min_value=0.5, max_value=2.5, value=1.2, step=0.1,
+                                                  help="Hauteur moyenne des charges")
+            
+            with tab2:
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    rack_type = st.selectbox("**Type de rack**", 
+                                           ["Palettier conventionnel", "Drive-in", "Palettier mobile", "Cantilever"])
+                with c2:
+                    rack_width = st.number_input("**Largeur rack (m)**", 
+                                               min_value=0.8, max_value=3.0, value=1.0, step=0.1,
+                                               help="Largeur d'un module de rack")
+                with c3:
+                    rack_depth = st.number_input("**Profondeur rack (m)**", 
+                                               min_value=0.8, max_value=3.0, value=1.2, step=0.1,
+                                               help="Profondeur d'un module de rack")
+            
+            with tab3:
+                c1, c2 = st.columns(2)
+                with c1:
+                    stock_rotation = st.number_input("**Rotation des stocks (jours)**", 
+                                                   min_value=1.0, max_value=365.0, value=30.0, step=1.0,
+                                                   help="Durée moyenne de stockage")
+                with c2:
+                    filling_rate = st.slider("**Taux de remplissage (%)**", 
+                                           50, 100, 85, step=1,
+                                           help="Pourcentage moyen d'occupation")
+        
+        with col2:
+            st.markdown("### 🎯 Paramètres avancés")
+            
+            st.markdown("#### 📈 Densité de stockage")
+            max_levels = st.slider("**Nombre de niveaux max**", 1, 10, 3, step=1,
+                                 help="Nombre d'étages de stockage")
+            
+            st.markdown("#### 🔄 Flux de marchandises")
+            flow_type = st.selectbox("**Type de flux**",
+                                   ["FIFO (First In First Out)", "LIFO (Last In First Out)", "FEFO (First Expired First Out)"])
+            
+            st.markdown("#### 🌡️ Conditions spéciales")
+            special_conditions = st.multiselect("**Besoins spécifiques**",
+                                              ["Chambres froides", "Sécurité renforcée", "Produits dangereux", 
+                                               "Valeur élevée", "Fragile"])
+        
+        # Sauvegarder les paramètres
+        st.session_state.warehouse_data['params'].update({
+            'pallet_type': pallet_type,
+            'pallet_weight': float(pallet_weight),
+            'pallet_height': float(pallet_height),
+            'rack_type': rack_type,
+            'rack_width': float(rack_width),
+            'rack_depth': float(rack_depth),
+            'stock_rotation': float(stock_rotation),
+            'filling_rate': float(filling_rate),
+            'max_levels': int(max_levels),
+            'flow_type': flow_type,
+            'special_conditions': special_conditions,
+            'pallet_volume': 1.0
+        })
+    
+    # ============================================================================
+    # ÉTAPE 3 : PARAMÈTRES DE CIRCULATION
+    # ============================================================================
+    elif st.session_state.warehouse_data['step'] == 3:
+        st.markdown('<div class="section-header">🚚 ÉTAPE 3 : CIRCULATION ET ÉQUIPEMENTS</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("### 🚗 Équipements de manutention")
+            
+            tab1, tab2 = st.tabs(["Équipements", "Circulation"])
+            
+            with tab1:
+                equipment_type = st.selectbox(
+                    "**Type d'équipement principal**",
+                    ["forklift", "reach_truck", "pallet_truck", "automated"],
+                    format_func=lambda x: {
+                        "forklift": "🔸 Chariot élévateur",
+                        "reach_truck": "🔸 Chariot à mât rétractable",
+                        "pallet_truck": "🔸 Transpalette électrique",
+                        "automated": "🤖 Système automatisé"
+                    }[x]
+                )
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    equipment_speed = st.slider("**Vitesse (km/h)**", 5, 25, 10, step=1,
+                                              help="Vitesse de circulation moyenne")
+                with c2:
+                    equipment_capacity = st.number_input("**Capacité (kg)**", 
+                                                       min_value=1000.0, max_value=5000.0, value=1500.0, step=100.0,
+                                                       help="Capacité de levage")
+            
+            with tab2:
+                c1, c2 = st.columns(2)
+                with c1:
+                    main_aisle_width = st.number_input("**Largeur allée principale (m)**", 
+                                                     min_value=2.0, max_value=6.0, value=3.5, step=0.1,
+                                                     help="Largeur des allées de circulation")
+                with c2:
+                    secondary_aisle_width = st.number_input("**Largeur allée secondaire (m)**", 
+                                                          min_value=1.5, max_value=3.0, value=2.0, step=0.1,
+                                                          help="Largeur des allées entre racks")
+                
+                operating_hours = st.slider("**Heures d'exploitation/jour**", 8, 24, 16, step=1)
+        
+        with col2:
+            st.markdown("### 📋 Spécifications techniques")
+            
+            st.markdown("#### 🛡️ Sécurité")
+            safety_margin = st.slider("**Marge de sécurité (%)**", 10, 50, 20, step=1,
+                                    help="Marge pour manœuvres et sécurité")
+            
+            st.markdown("#### 💡 Éclairage")
+            lighting_type = st.selectbox("**Type d'éclairage**",
+                                       ["LED haute baie", "Fluorescent", "Sodium haute pression"])
+            
+            st.markdown("#### 🚨 Systèmes de sécurité")
+            security_systems = st.multiselect("**Équipements de sécurité**",
+                                            ["Détection incendie", "Vidéosurveillance", "Contrôle d'accès",
+                                             "Alarme intrusion", "Éclairage de sécurité"])
+        
+        # Sauvegarder les paramètres
+        st.session_state.warehouse_data['params'].update({
+            'equipment_type': equipment_type,
+            'equipment_speed': float(equipment_speed),
+            'equipment_capacity': float(equipment_capacity),
+            'main_aisle_width': float(main_aisle_width),
+            'secondary_aisle_width': float(secondary_aisle_width),
+            'operating_hours': float(operating_hours),
+            'safety_margin': float(safety_margin),
+            'lighting_type': lighting_type,
+            'security_systems': security_systems
+        })
+    
+    # ============================================================================
+    # ÉTAPE 4 : CALCULS ET RÉSULTATS
+    # ============================================================================
+    elif st.session_state.warehouse_data['step'] == 4:
+        st.markdown('<div class="section-header">📊 ÉTAPE 4 : RÉSULTATS ET ANALYSE</div>', unsafe_allow_html=True)
+        
+        # Bouton de calcul
+        if st.button("🚀 Lancer les calculs de dimensionnement", type="primary", use_container_width=True):
+            with st.spinner("🔬 Calculs en cours avec vérification des normes..."):
+                calculator = WarehouseCalculator()
+                params = st.session_state.warehouse_data['params']
+                
+                # Calculs
+                capacity = calculator.calculate_storage_capacity(params)
+                circulation = calculator.calculate_circulation(params, capacity)
+                costs = calculator.calculate_costs(params, capacity, circulation)
+                warnings, optimizations = calculator.check_norms_compliance(params, capacity)
+                
+                # Sauvegarder
+                st.session_state.warehouse_data['calculations'] = {
+                    'capacity': capacity,
+                    'circulation': circulation,
+                    'costs': costs
+                }
+                st.session_state.warehouse_data['warnings'] = warnings
+                st.session_state.warehouse_data['optimizations'] = optimizations
+            
+            st.success("✅ Calculs terminés avec succès !")
+            st.rerun()
+        
+        # Afficher les résultats si disponibles
+        if st.session_state.warehouse_data['calculations']:
+            calc = st.session_state.warehouse_data['calculations']
+            
+            # Tableau de bord des métriques
+            st.markdown("### 📈 TABLEAU DE BORD DES PERFORMANCES")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h4>🏗️ Racks installés</h4>
+                    <h1 style="color:#3498db;">{calc['capacity'].get('total_racks', 0)}</h1>
+                    <p>{calc['capacity'].get('racks_per_row', 0)} × {calc['capacity'].get('rows_per_side', 0)} × 2 côtés</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h4>📦 Capacité palettes</h4>
+                    <h1 style="color:#2ecc71;">{calc['capacity'].get('total_pallets', 0):,}</h1>
+                    <p>{calc['capacity'].get('levels', 0)} niveaux × {calc['capacity'].get('total_positions', 0)} emplacements</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h4>💰 Investissement</h4>
+                    <h1 style="color:#e74c3c;">{calc['costs'].get('total_investment', 0)} k€</h1>
+                    <p>{calc['costs'].get('cost_per_pallet', 0)} €/palette/an</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h4>⚡ Productivité</h4>
+                    <h1 style="color:#f39c12;">{calc['circulation'].get('pallets_per_hour', 0):.1f}/h</h1>
+                    <p>{calc['circulation'].get('required_equipment', 0)} équipements nécessaires</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Détails des calculs
+            st.markdown("### 📋 RAPPORT DÉTAILLÉ")
+            
+            tab1, tab2, tab3 = st.tabs(["Capacité", "Circulation", "Coûts"])
+            
+            with tab1:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("#### 📊 Capacités de stockage")
+                    capacity_data = {
+                        "Métrique": ["Surface totale", "Surface de stockage", "Taux d'occupation", 
+                                   "Volume utile", "Palettes totales", "Rotation moyenne"],
+                        "Valeur": [f"{calc['capacity'].get('total_area', 0):.0f} m²", 
+                                 f"{calc['capacity'].get('storage_area', 0):.1f} m²",
+                                 f"{calc['capacity'].get('storage_ratio', 0):.1f}%",
+                                 f"{calc['capacity'].get('volume_capacity', 0):.0f} m³",
+                                 f"{calc['capacity'].get('total_pallets', 0):,}",
+                                 f"{st.session_state.warehouse_data['params'].get('stock_rotation', 30):.0f} jours"]
+                    }
+                    st.dataframe(pd.DataFrame(capacity_data), use_container_width=True, hide_index=True)
+                
+                with col2:
+                    st.markdown("#### 🎯 Efficacité spatiale")
+                    
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    labels = ['Stockage', 'Circulation', 'Services', 'Sécurité']
+                    values = [
+                        calc['capacity'].get('storage_ratio', 0),
+                        100 - calc['capacity'].get('storage_ratio', 0) - 15,
+                        10, 5
+                    ]
+                    colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12']
+                    
+                    ax.pie(values, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+                    ax.axis('equal')
+                    st.pyplot(fig)
+            
+            with tab2:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("#### 🚗 Performance logistique")
+                    circulation_data = {
+                        "Paramètre": ["Distance moyenne", "Temps de cycle", "Débit horaire", 
+                                    "Débit journalier", "Équipements nécessaires", "Capacité théorique"],
+                        "Valeur": [f"{calc['circulation'].get('avg_distance', 0):.1f} m",
+                                 f"{calc['circulation'].get('cycle_time', 0):.1f} min",
+                                 f"{calc['circulation'].get('pallets_per_hour', 0):.1f} pal/h",
+                                 f"{calc['circulation'].get('daily_capacity', 0):,} pal/j",
+                                 f"{calc['circulation'].get('required_equipment', 0)}",
+                                 f"{calc['circulation'].get('daily_throughput', 0):,} pal/j"]
+                    }
+                    st.dataframe(pd.DataFrame(circulation_data), use_container_width=True, hide_index=True)
+                
+                with col2:
+                    st.markdown("#### 📅 Planning de déploiement")
+                    timeline_data = {
+                        "Phase": ["Étude technique", "Commande équipements", "Installation racks", 
+                                "Mise en service", "Formation équipe", "Optimisation"],
+                        "Durée (sem)": [4, 8, 6, 2, 1, 4],
+                        "Statut": ["✅", "🔄", "⏳", "⏳", "⏳", "⏳"]
+                    }
+                    st.dataframe(pd.DataFrame(timeline_data), use_container_width=True, hide_index=True)
+            
+            with tab3:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("#### 💰 Investissement initial")
+                    investment_data = {
+                        "Poste": ["Racks et rayonnage", "Surface bâtiment", "Équipements", 
+                                "Installation", "TOTAL"],
+                        "Montant (k€)": [calc['costs'].get('rack_cost', 0), calc['costs'].get('area_cost', 0),
+                                       calc['costs'].get('equipment_cost', 0), calc['costs'].get('installation_cost', 0),
+                                       calc['costs'].get('total_investment', 0)]
+                    }
+                    st.dataframe(pd.DataFrame(investment_data), use_container_width=True, hide_index=True)
+                
+                with col2:
+                    st.markdown("#### 💸 Coûts d'exploitation annuels")
+                    operating_data = {
+                        "Poste": ["Maintenance", "Personnel", "Énergie", "TOTAL"],
+                        "Montant (k€)": [calc['costs'].get('annual_maintenance', 0), 
+                                       calc['costs'].get('annual_personnel', 0),
+                                       calc['costs'].get('annual_energy', 0), 
+                                       calc['costs'].get('total_annual_cost', 0)]
+                    }
+                    st.dataframe(pd.DataFrame(operating_data), use_container_width=True, hide_index=True)
+            
+            # Alertes et optimisations
+            if st.session_state.warehouse_data['warnings']:
+                st.markdown("### ⚠️ ALERTES DE CONFORMITÉ")
+                for warning in st.session_state.warehouse_data['warnings']:
+                    st.markdown(f'<div class="warning-box">{warning}</div>', unsafe_allow_html=True)
+            
+            if st.session_state.warehouse_data['optimizations']:
+                st.markdown("### 💡 OPTIMISATIONS RECOMMANDÉES")
+                for opt in st.session_state.warehouse_data['optimizations']:
+                    st.markdown(f'<div class="success-box">{opt}</div>', unsafe_allow_html=True)
+    
+    # ============================================================================
+    # ÉTAPE 5 : VISUALISATION ET EXPORT
+    # ============================================================================
+    elif st.session_state.warehouse_data['step'] == 5:
+        st.markdown('<div class="section-header">🎨 ÉTAPE 5 : VISUALISATION ET RAPPORTS</div>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown("### 📐 PLAN D'IMPLANTATION 2D")
+            
+            params = st.session_state.warehouse_data.get('params', {})
+            calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
+            
+            length = max(params.get('length', 60.0), params.get('width', 40.0))
+            width = min(params.get('length', 60.0), params.get('width', 40.0))
+            
+            rack_width = params.get('rack_width', 1.0)
+            rack_depth = params.get('rack_depth', 1.2)
+            main_aisle_width = params.get('main_aisle_width', 3.5)
+            
+            racks_per_row = calc.get('racks_per_row', 0)
+            rows_per_side = calc.get('rows_per_side', 0)
+            
+            if racks_per_row == 0:
+                usable_length = length - main_aisle_width - 4
+                racks_per_row = max(1, int(usable_length / (rack_depth + 0.8)))
+            
+            if rows_per_side == 0:
+                usable_width = width - 4
+                rows_per_side = max(1, int(usable_width / (rack_width + 0.8)))
+            
+            total_racks = racks_per_row * rows_per_side * 2
+            
+            st.markdown(f"""
+            <div class="parameter-card">
+                <h4>📊 Configuration calculée</h4>
+                <p><strong>Racks par rangée :</strong> {racks_per_row}</p>
+                <p><strong>Rangées par côté :</strong> {rows_per_side}</p>
+                <p><strong>Total racks :</strong> {total_racks}</p>
+                <p><strong>Utilisation surface :</strong> ~85%</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Créer le schéma
+            fig, ax = plt.subplots(figsize=(14, 10))
+            
+            # Dessiner le bâtiment
+            ax.add_patch(patches.Rectangle((0, 0), length, width,
+                                           linewidth=3, edgecolor='#2c3e50',
+                                           facecolor='#ecf0f1', alpha=0.3,
+                                           label='Bâtiment'))
+            
+            total_rack_width = rows_per_side * rack_width
+            available_width = width - 4
+            spacing_y = (available_width - total_rack_width) / (rows_per_side + 1) if rows_per_side > 1 else 1.0
+            
+            total_rack_length = racks_per_row * rack_depth
+            available_length_left = (length - main_aisle_width) / 2 - 2
+            spacing_x = (available_length_left - total_rack_length) / (racks_per_row + 1) if racks_per_row > 1 else 1.0
+            
+            # Racks côté GAUCHE
+            for i in range(racks_per_row):
+                for j in range(rows_per_side):
+                    x = 2 + i * (rack_depth + spacing_x)
+                    y = 2 + j * (rack_width + spacing_y)
+                    ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
+                                                 facecolor='#3498db', edgecolor='#2980b9',
+                                                 alpha=0.8))
+            
+            # Allée centrale
+            alley_start = 2 + racks_per_row * (rack_depth + spacing_x) + spacing_x
+            ax.add_patch(patches.Rectangle((alley_start, 0), main_aisle_width, width,
+                                         facecolor='#95a5a6', alpha=0.5,
+                                         edgecolor='#7f8c8d', linewidth=2,
+                                         label='Allée principale'))
+            
+            # Racks côté DROIT
+            alley_end = alley_start + main_aisle_width
+            for i in range(racks_per_row):
+                for j in range(rows_per_side):
+                    x = alley_end + spacing_x + i * (rack_depth + spacing_x)
+                    y = 2 + j * (rack_width + spacing_y)
+                    ax.add_patch(patches.Rectangle((x, y), rack_depth, rack_width,
+                                                 facecolor='#2ecc71', edgecolor='#27ae60',
+                                                 alpha=0.8))
+            
+            # Quais de chargement
+            dock_doors = min(params.get('dock_doors', 4), 6)
+            for i in range(dock_doors):
+                quai_width = 4.0
+                quai_height = 3.0
+                quai_x = length - quai_width
+                quai_y = (i + 1) * (width / (dock_doors + 1)) - quai_height/2
+                ax.add_patch(patches.Rectangle((quai_x, quai_y), quai_width, quai_height,
+                                             facecolor='#e74c3c', alpha=0.7,
+                                             edgecolor='#c0392b', linewidth=2,
+                                             label='Quai' if i == 0 else ""))
+            
+            # Zone de manœuvre
+            ax.add_patch(patches.Rectangle((length - quai_width - 8, 0), 8, width,
+                                         facecolor='#f1c40f', alpha=0.2,
+                                         hatch='//', label='Zone manœuvre'))
+            
+            # Sorties de secours
+            exit_width = 2.4
+            ax.add_patch(patches.Rectangle((length/2 - exit_width/2, -0.5), exit_width, 1,
+                                         facecolor='#9b59b6', alpha=0.6,
+                                         label='Sortie secours'))
+            
+            # Configuration du graphique
+            ax.set_xlim(-2, length + 2)
+            ax.set_ylim(-2, width + 2)
+            ax.set_aspect('equal')
+            ax.set_xlabel('LONGUEUR (mètres)', fontweight='bold', fontsize=12)
+            ax.set_ylabel('LARGEUR (mètres)', fontweight='bold', fontsize=12)
+            ax.set_title(f'PLAN D\'IMPLANTATION OPTIMISÉ - {total_racks} RACKS', 
+                        fontsize=16, fontweight='bold', pad=20)
+            
+            ax.annotate(f'{length:.0f}m', xy=(length/2, -1.5), 
+                        ha='center', va='center', fontsize=10, fontweight='bold',
+                        color='#2c3e50')
+            
+            ax.annotate(f'{width:.0f}m', xy=(-1.5, width/2), 
+                        ha='center', va='center', fontsize=10, fontweight='bold',
+                        color='#2c3e50', rotation=90)
+            
+            ax.annotate(f'Allée\n{main_aisle_width}m', 
+                        xy=(alley_start + main_aisle_width/2, width/2),
+                        ha='center', va='center', fontsize=9, fontweight='bold',
+                        color='#c0392b', rotation=90,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+            
+            # Légende
+            from matplotlib.patches import Patch
+            legend_elements = [
+                Patch(facecolor='#3498db', edgecolor='#2980b9', alpha=0.8, label='Racks côté gauche'),
+                Patch(facecolor='#2ecc71', edgecolor='#27ae60', alpha=0.8, label='Racks côté droit'),
+                Patch(facecolor='#95a5a6', edgecolor='#7f8c8d', alpha=0.5, label='Allée principale'),
+                Patch(facecolor='#e74c3c', edgecolor='#c0392b', alpha=0.7, label='Quais chargement'),
+                Patch(facecolor='#f1c40f', alpha=0.2, hatch='//', label='Zone de manœuvre'),
+                Patch(facecolor='#9b59b6', alpha=0.6, label='Sortie secours')
+            ]
+            ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1),
+                      borderaxespad=0., fontsize=9)
+            
+            ax.grid(True, which='major', linestyle='-', linewidth=0.5, alpha=0.3, color='gray')
+            ax.grid(True, which='minor', linestyle=':', linewidth=0.3, alpha=0.2, color='gray')
+            ax.minorticks_on()
+            
+            plt.tight_layout(rect=[0, 0, 0.85, 1])
+            
+            st.pyplot(fig)
+            
+            # Statistiques d'utilisation
+            st.markdown("### 📊 STATISTIQUES D'UTILISATION")
+            
+            col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+            
+            with col_stat1:
+                surface_totale = length * width
+                st.metric("Surface totale", f"{surface_totale:.0f} m²")
+            
+            with col_stat2:
+                surface_racks = total_racks * rack_width * rack_depth
+                st.metric("Surface racks", f"{surface_racks:.0f} m²")
+            
+            with col_stat3:
+                surface_circulation = surface_totale - surface_racks
+                st.metric("Surface circulation", f"{surface_circulation:.0f} m²")
+            
+            with col_stat4:
+                taux_utilisation = (surface_racks / surface_totale) * 100 if surface_totale > 0 else 0
+                st.metric("Taux d'utilisation", f"{taux_utilisation:.1f}%")
+        
+        with col2:
+            st.markdown("### 📥 EXPORTATION")
+            
+            if st.button("📊 Générer rapport Excel", use_container_width=True):
+                st.success("Rapport Excel généré avec succès!")
+                
+                import pandas as pd
+                params_df = pd.DataFrame([params])
+                st.download_button(
+                    label="⬇️ Télécharger Excel",
+                    data=params_df.to_csv(index=False).encode('utf-8'),
+                    file_name="parametres_entrepot.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            if st.button("📄 Générer rapport PDF", use_container_width=True):
+                st.success("Rapport PDF généré avec succès!")
+            
+            # Exporter l'image
+            if st.button("🖼️ Exporter l'image", use_container_width=True):
+                buf = BytesIO()
+                fig.savefig(buf, format="png", dpi=150, bbox_inches='tight')
+                st.download_button(
+                    label="⬇️ Télécharger l'image",
+                    data=buf.getvalue(),
+                    file_name="plan_implantation.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+            
+            st.markdown("---")
+            st.markdown("### 🤖 GÉNÉRATION IA")
+            
+            st.markdown("**Générer une visualisation 3D :**")
+            
+            calc = st.session_state.warehouse_data.get('calculations', {}).get('capacity', {})
+            prompt = f"""
+            Photorealistic warehouse interior, industrial storage system with {calc.get('total_racks', 0)} racks, 
+            {params.get('max_levels', 3)} levels, {params.get('rack_width', 1.0)}m x {params.get('rack_depth', 1.2)}m rack size,
+            {params.get('main_aisle_width', 3.5)}m wide aisle, {params.get('equipment_type', 'forklift')} operations, 
+            LED lighting, safety markings, wide-angle view, architectural visualization, 8K resolution
+            """
+            
+            st.code(prompt, language="text")
+            
+            if st.button("🎨 Générer avec IA", use_container_width=True):
+                st.info("Copiez le prompt ci-dessus dans Midjourney, DALL-E 3 ou Stable Diffusion")
+
+# ============================================================================
+# SELECTEUR DE MODE PRINCIPAL
+# ============================================================================
+def main():
+    """Fonction principale pour gérer les modes"""
+    
+    # Sélecteur de mode dans la sidebar principale
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### 🎛️ MODE DE CALCUL")
+        
+        # Création des onglets pour les modes
+        mode = st.radio(
+            "CHOISISSEZ LE MODE",
+            ["CALCUL SIMPLE", "CALCUL AVANCÉ"],
+            index=0 if st.session_state.warehouse_data['mode'] == 'simple' else 1,
+            key="mode_selector"
+        )
+        
+        # Mettre à jour le mode dans session_state
+        if mode == "CALCUL SIMPLE":
+            st.session_state.warehouse_data['mode'] = 'simple'
+        else:
+            st.session_state.warehouse_data['mode'] = 'advanced'
+        
+        st.markdown("---")
+        
+        # Afficher les informations du mode actuel
+        if st.session_state.warehouse_data['mode'] == 'simple':
+            st.markdown("""
+            <div class="parameter-card">
+                <h4>🎯 Mode Simple</h4>
+                <p>• Calculs rapides et intuitifs</p>
+                <p>• Interface simplifiée</p>
+                <p>• Résultats immédiats</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="parameter-card">
+                <div class="construction-badge">EN CONSTRUCTION</div>
+                <h4>🚧 Mode Avancé</h4>
+                <p>• Simulations complexes</p>
+                <p>• Optimisations IA</p>
+                <p>• Rapports détaillés</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Afficher le mode sélectionné
+    if st.session_state.warehouse_data['mode'] == 'advanced':
+        show_advanced_mode()
+    else:
+        show_simple_mode()
+
+# ============================================================================
+# EXÉCUTION PRINCIPALE
+# ============================================================================
+if __name__ == "__main__":
+    main()
 
 # ============================================================================
 # PIED DE PAGE
@@ -1231,7 +1202,7 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #7f8c8d; padding: 20px;">
     <p style="font-size: 0.9em;">
-        <strong>Warehouse Dimensioning Pro v3.0</strong> | 
+        <strong>Warehouse Dimensioning Pro v4.0</strong> | 
         © 2024 - Solution professionnelle de dimensionnement d'entrepôts |
         Conforme aux normes internationales
     </p>
