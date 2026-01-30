@@ -74,10 +74,24 @@ if st.button("🚀 Calculer la configuration", type="primary"):
     # Vérification conformité hauteur
     conforme_hauteur = hauteur_totale_rack <= (hauteur - 0.5)
     
-    # Estimation nombre de racks (avec marge de sécurité)
+    # Calcul optimisé du nombre de racks
+    espace_lat = espacement_lateral / 100
+    
+    # Calcul intelligent basé sur l'espace réel disponible
+    # En longueur : on peut placer des racks avec espacement latéral entre eux
+    espace_dispo_longueur = longueur * 0.95  # 5% de marge sur les bords
+    racks_longueur = int(espace_dispo_longueur / (rack_longueur + espace_lat))
+    
+    # En largeur : on alterne rack + allée
+    espace_dispo_largeur = largeur * 0.95  # 5% de marge sur les bords
+    # Formule: rack + allée, mais la dernière allée peut être plus petite
+    racks_largeur = int(espace_dispo_largeur / (rack_largeur + allee))
+    
+    # Ajuster selon le coefficient d'utilisation souhaité
     coef_utilisation = utilisation_surface / 100
-    racks_longueur = int((longueur * coef_utilisation) / (rack_longueur + espacement_lateral / 100))
-    racks_largeur = int((largeur * coef_utilisation) / (rack_largeur + allee))
+    racks_longueur = max(1, int(racks_longueur * coef_utilisation))
+    racks_largeur = max(1, int(racks_largeur * coef_utilisation))
+    
     nb_racks = racks_longueur * racks_largeur
     
     # Capacités
@@ -199,8 +213,12 @@ if st.button("🚀 Calculer la configuration", type="primary"):
         # Calculer l'espacement entre les racks
         espace_lat = espacement_lateral / 100
         
-        x_offset = (longueur - (racks_longueur * rack_longueur + (racks_longueur - 1) * espace_lat)) / 2
-        y_offset = allee / 2
+        # Calcul optimisé des marges pour centrer les racks
+        espace_total_longueur = racks_longueur * rack_longueur + (racks_longueur - 1) * espace_lat
+        espace_total_largeur = racks_largeur * rack_largeur + (racks_largeur - 1) * allee
+        
+        x_offset = (longueur - espace_total_longueur) / 2
+        y_offset = (largeur - espace_total_largeur) / 2
         
         # Dessiner les racks
         for i in range(racks_longueur):
@@ -611,6 +629,70 @@ if st.button("🚀 Calculer la configuration", type="primary"):
             st.warning("💡 Prévoir au moins 1m de marge au-dessus des racks")
         if palettes_par_niveau == 1:
             st.info("💡 Envisager 2 palettes/niveau pour optimiser l'espace")
+    
+    # Section d'optimisation
+    st.divider()
+    st.subheader("🎯 Suggestions d'optimisation")
+    
+    suggestions = []
+    
+    # Analyse du taux d'utilisation
+    if taux_utilisation < 40:
+        suggestions.append({
+            'icon': '📏',
+            'titre': 'Augmenter la taille des racks',
+            'description': f'Votre utilisation est de seulement {taux_utilisation:.1f}%. Vous pourriez augmenter la longueur ou largeur des racks.',
+            'impact': f'Impact: +{40-taux_utilisation:.0f}% d\'utilisation possible'
+        })
+    
+    if taux_utilisation < 50:
+        suggestions.append({
+            'icon': '🚜',
+            'titre': 'Réduire la largeur des allées',
+            'description': f'Allée actuelle: {allee}m. Si vous utilisez des Reach Trucks, vous pouvez descendre à 2.8-3.0m.',
+            'impact': f'Gain potentiel: {((allee - 2.8) / allee * 100):.0f}% de surface supplémentaire'
+        })
+    
+    if hauteur - hauteur_totale_rack > 3.0:
+        suggestions.append({
+            'icon': '⬆️',
+            'titre': 'Ajouter des étages',
+            'description': f'Vous avez {hauteur - hauteur_totale_rack:.1f}m de hauteur inutilisée. Vous pourriez ajouter {int((hauteur - hauteur_totale_rack - 1) / hauteur_etage)} étages.',
+            'impact': f'Capacité supplémentaire: +{int((hauteur - hauteur_totale_rack - 1) / hauteur_etage) * nb_racks * palettes_par_niveau:,} palettes'.replace(',', ' ')
+        })
+    
+    if palettes_par_niveau == 1:
+        suggestions.append({
+            'icon': '📦',
+            'titre': 'Augmenter les palettes par niveau',
+            'description': 'Vous stockez 1 palette par niveau. Passer à 2 doublerait votre capacité.',
+            'impact': f'Capacité supplémentaire: +{capacite_totale:,} palettes'.replace(',', ' ')
+        })
+    
+    if rack_longueur < 3.0 and longueur > 40:
+        suggestions.append({
+            'icon': '↔️',
+            'titre': 'Utiliser des racks plus longs',
+            'description': f'Racks actuels: {rack_longueur}m. Des racks de 3-4m optimiseraient mieux l\'espace.',
+            'impact': 'Réduction du nombre total de racks et simplification de la gestion'
+        })
+    
+    if utilisation_surface < 80:
+        suggestions.append({
+            'icon': '📊',
+            'titre': 'Augmenter le taux d\'utilisation cible',
+            'description': f'Taux actuel: {utilisation_surface}%. Un taux de 75-80% est optimal pour les entrepôts.',
+            'impact': f'Capacité potentielle: +{int((80 - utilisation_surface) / 100 * capacite_totale):,} palettes'.replace(',', ' ')
+        })
+    
+    if len(suggestions) > 0:
+        for i, sugg in enumerate(suggestions):
+            with st.expander(f"{sugg['icon']} {sugg['titre']}", expanded=(i==0)):
+                st.write(f"**Description:** {sugg['description']}")
+                st.success(f"**{sugg['impact']}**")
+    else:
+        st.success("🎉 Votre configuration est déjà bien optimisée !")
+        st.info("Votre taux d'utilisation et vos dimensions sont dans les normes recommandées.")
     
     # Export détaillé
     st.divider()
