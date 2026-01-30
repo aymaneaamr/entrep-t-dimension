@@ -1,440 +1,354 @@
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
+import matplotlib
+matplotlib.use('Agg')  # Pour éviter les problèmes avec Flask
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import numpy as np
-import json
+from io import BytesIO
+import base64
+from flask import Flask, render_template_string, request, send_file
 
-st.set_page_config(
-    page_title="Warehouse Configuration Optimizer",
-    page_icon="🏭",
-    layout="wide"
-)
+app = Flask(__name__)
 
-# Configuration CSS
-st.markdown("""
-<style>
-    .main-title {
-        text-align: center;
-        color: #1E3A8A;
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
-    }
-    .sub-title {
-        text-align: center;
-        color: #4B5563;
-        font-size: 1.2rem;
-        margin-bottom: 2rem;
-    }
-    .stButton>button {
-        background-color: #2563EB;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        border: none;
-        width: 100%;
-        padding: 0.75rem;
-    }
-    .metric-box {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-        margin-bottom: 1rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="main-title">🏭 Warehouse Configuration Optimizer</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Dimensionnement intelligent pour chariots élévateurs</div>', unsafe_allow_html=True)
-
-# Initialisation session state
-if 'results' not in st.session_state:
-    st.session_state.results = None
-if 'calculated' not in st.session_state:
-    st.session_state.calculated = False
-
-# SIDEBAR - Paramètres
-with st.sidebar:
-    st.header("⚙️ Paramètres de configuration")
-    
-    # Dimensions entrepôt
-    st.subheader("🏢 Dimensions Entrepôt")
-    col1, col2 = st.columns(2)
-    with col1:
-        longueur = st.number_input("Longueur (m)", 10.0, 200.0, 50.0, 1.0)
-    with col2:
-        largeur = st.number_input("Largeur (m)", 10.0, 100.0, 30.0, 1.0)
-    
-    hauteur = st.number_input("Hauteur (m)", 3.0, 30.0, 12.0, 0.5)
-    
-    st.divider()
-    
-    # Paramètres racks
-    st.subheader("📦 Paramètres Racks")
-    
-    rack_longueur = st.selectbox("Longueur rack (m)", [1.2, 1.5, 1.8, 2.0, 2.4, 2.7, 3.0], index=4)
-    rack_largeur = st.selectbox("Largeur rack (m)", [0.8, 1.0, 1.2, 1.5, 1.8], index=1)
-    
-    etages = st.slider("Nombre d'étages", 1, 15, 6)
-    hauteur_etage = st.number_input("Hauteur par étage (m)", 0.5, 3.0, 1.5, 0.1)
-    
-    st.divider()
-    
-    # Chariots élévateurs
-    st.subheader("🚜 Chariots Élévateurs")
-    
-    type_chariot = st.selectbox("Type de chariot", 
-                               ["Contrebalance", "Reach Truck", "Télescopique", "Transpalette", "Gerbeur"])
-    
-    # Spécifications par type
-    specs = {
-        "Contrebalance": {"allee_min": 3.5, "hauteur_max": 12.0},
-        "Reach Truck": {"allee_min": 2.7, "hauteur_max": 15.0},
-        "Télescopique": {"allee_min": 3.0, "hauteur_max": 14.0},
-        "Transpalette": {"allee_min": 1.8, "hauteur_max": 6.0},
-        "Gerbeur": {"allee_min": 2.0, "hauteur_max": 10.0}
-    }
-    
-    allee = st.slider(f"Largeur allée (m)", 
-                     float(specs[type_chariot]["allee_min"]), 
-                     float(specs[type_chariot]["allee_min"] + 2.0), 
-                     float(specs[type_chariot]["allee_min"] + 0.5), 
-                     step=0.1)
-    
-    st.divider()
-    
-    # Options
-    st.subheader("⚙️ Options")
-    espacement_vertical = st.slider("Espacement vertical (cm)", 10, 100, 30)
-    marge_securite = st.slider("Marge sécurité (%)", 5, 30, 15)
-    taux_utilisation = st.slider("Taux utilisation cible (%)", 50, 90, 70)
-
-# Fonction de calcul SIMPLIFIÉE
-def calculer_configuration(longueur, largeur, hauteur, rack_longueur, rack_largeur, 
-                          etages, hauteur_etage, espacement_vertical, 
-                          marge_securite, taux_utilisation, allee, type_chariot):
-    
-    try:
-        # Calculs de base
-        surface_totale = longueur * largeur
-        volume_total = surface_totale * hauteur
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Générateur de Configuration d'Entrepôt</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
+        h1 { color: #333; text-align: center; }
+        .config-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .form-group { display: flex; flex-direction: column; }
+        label { font-weight: bold; margin-bottom: 5px; }
+        input, select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { grid-column: span 2; padding: 12px; background: #4CAF50; color: white; 
+                 border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .image-container { text-align: center; margin-top: 30px; }
+        img { max-width: 100%; border: 1px solid #ddd; border-radius: 5px; }
+        .download-btn { display: inline-block; margin-top: 10px; padding: 10px 20px; 
+                        background: #2196F3; color: white; text-decoration: none; border-radius: 5px; }
+        .download-btn:hover { background: #0b7dda; }
+        .info-box { background: #e8f4fd; padding: 15px; border-radius: 5px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 Générateur de Configuration d'Entrepôt</h1>
         
-        # Hauteur totale rack
-        hauteur_totale_rack = etages * hauteur_etage + (etages - 1) * (espacement_vertical / 100)
-        conforme_hauteur = hauteur_totale_rack <= (hauteur - 0.5)
+        <div class="info-box">
+            <strong>Instructions :</strong> Ajustez les paramètres ci-dessous, puis cliquez sur "Générer le schéma".
+        </div>
         
-        # Calcul nombre de racks (simplifié)
-        coef_utilisation = taux_utilisation / 100
-        espace_lat = 0.2  # 20cm entre racks
-        
-        # Racks en longueur
-        racks_longueur = int((longueur * coef_utilisation) / (rack_longueur + espace_lat))
-        racks_longueur = max(1, racks_longueur)
-        
-        # Racks en largeur (des deux côtés de l'allée)
-        largeur_dispo = largeur * coef_utilisation - allee
-        racks_largeur_par_cote = int(largeur_dispo / (2 * (rack_largeur + espace_lat)))
-        racks_largeur = max(1, racks_largeur_par_cote) * 2
-        
-        nb_racks = racks_longueur * racks_largeur
-        
-        # Capacité (simplifiée)
-        palettes_par_niveau = 2  # Valeur par défaut
-        capacite_par_rack = etages * palettes_par_niveau
-        capacite_totale = nb_racks * capacite_par_rack
-        
-        # Surfaces
-        surface_rack_unitaire = rack_longueur * rack_largeur
-        surface_racks_totale = nb_racks * surface_rack_unitaire
-        surface_all = surface_totale - surface_racks_totale
-        taux_utilisation_reel = (surface_racks_totale / surface_totale) * 100
-        
-        # Score
-        score = min(100, taux_utilisation_reel * 1.2)
-        
-        return {
-            'surface_totale': surface_totale,
-            'volume_total': volume_total,
-            'hauteur_totale_rack': hauteur_totale_rack,
-            'conforme_hauteur': conforme_hauteur,
-            'racks_longueur': racks_longueur,
-            'racks_largeur': racks_largeur,
-            'nb_racks': nb_racks,
-            'palettes_par_niveau': palettes_par_niveau,
-            'capacite_par_rack': capacite_par_rack,
-            'capacite_totale': capacite_totale,
-            'surface_racks_totale': surface_racks_totale,
-            'surface_all': surface_all,
-            'taux_utilisation': taux_utilisation_reel,
-            'score': score,
-            'specs_chariot': specs[type_chariot]
-        }
-    except Exception as e:
-        return None
-
-# Interface principale
-st.markdown("## 🚀 Analyse et Configuration")
-
-col1, col2 = st.columns([3, 1])
-with col1:
-    if st.button("🚀 Calculer la configuration", type="primary", use_container_width=True):
-        with st.spinner("Calcul en cours..."):
-            results = calculer_configuration(
-                longueur, largeur, hauteur, rack_longueur, rack_largeur,
-                etages, hauteur_etage, espacement_vertical,
-                marge_securite, taux_utilisation, allee, type_chariot
-            )
+        <form method="POST" class="config-form">
+            <div class="form-group">
+                <label>Largeur totale de l'entrepôt (m) :</label>
+                <input type="number" name="largeur_entrepot" value="{{ largeur_entrepot }}" step="1" min="10" max="200" required>
+            </div>
             
-            if results:
-                st.session_state.results = results
-                st.session_state.calculated = True
-                st.success("✅ Configuration calculée avec succès!")
-            else:
-                st.error("❌ Erreur lors du calcul")
+            <div class="form-group">
+                <label>Longueur totale de l'entrepôt (m) :</label>
+                <input type="number" name="longueur_entrepot" value="{{ longueur_entrepot }}" step="1" min="10" max="200" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Largeur d'un rack (m) :</label>
+                <input type="number" name="largeur_rack" value="{{ largeur_rack }}" step="0.5" min="0.5" max="5" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Longueur d'un rack (m) :</label>
+                <input type="number" name="longueur_rack" value="{{ longueur_rack }}" step="0.5" min="1" max="15" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Hauteur des racks (m) :</label>
+                <input type="number" name="hauteur_rack" value="{{ hauteur_rack }}" step="0.5" min="2" max="20" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Nombre de rangées :</label>
+                <input type="number" name="nb_rangees" value="{{ nb_rangees }}" step="1" min="1" max="20" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Largeur des allées (m) :</label>
+                <input type="number" name="largeur_allee" value="{{ largeur_allee }}" step="0.5" min="2" max="15" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Type de configuration :</label>
+                <select name="config_type">
+                    <option value="simple" {{ 'selected' if config_type=='simple' else '' }}>Simple (2 rangées)</option>
+                    <option value="double" {{ 'selected' if config_type=='double' else '' }}>Double (4 rangées)</option>
+                    <option value="compact" {{ 'selected' if config_type=='compact' else '' }}>Compact (maximiser espace)</option>
+                </select>
+            </div>
+            
+            <button type="submit">🏭 Générer le schéma</button>
+        </form>
+        
+        {% if image_data %}
+        <div class="image-container">
+            <h2>📐 Schéma généré</h2>
+            <img src="data:image/png;base64,{{ image_data }}" alt="Schéma d'entrepôt">
+            <br>
+            <a href="/download" class="download-btn">📥 Télécharger l'image (PNG)</a>
+            <a href="/download_svg" class="download-btn">📐 Télécharger en SVG (modifiable)</a>
+        </div>
+        
+        <div class="info-box">
+            <h3>📋 Spécifications générées :</h3>
+            <p>• Surface totale : {{ largeur_entrepot }}m x {{ longueur_entrepot }}m</p>
+            <p>• Nombre total de racks : {{ nb_racks_total }}</p>
+            <p>• Surface de stockage estimée : {{ surface_stockage }} m²</p>
+            <p>• Largeur allée : {{ largeur_allee }}m ({{ "✓ Conforme chariot élévateur" if largeur_allee >= 3 else "⚠ Allée étroite" }})</p>
+            <p>• Hauteur maximale : {{ hauteur_rack }}m ({{ "✓ Standard" if hauteur_rack <= 12 else "⚠ Nécessite équipement spécial" }})</p>
+        </div>
+        {% endif %}
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666;">
+            <p><strong>Conseil pour une image réaliste :</strong> Copiez ce prompt dans un générateur d'images IA (DALL·E, Midjourney) :</p>
+            <code style="background: #eee; padding: 10px; display: block; border-radius: 5px; margin-top: 10px;">
+            "Photorealistic warehouse storage layout with {{ nb_racks_total }} metal racks, {{ hauteur_rack }}m height, 
+            {{ largeur_rack }}m x {{ longueur_rack }}m rack size, {{ largeur_allee }}m wide aisles, 
+            pallet storage system, forklift in operation, dimension markers visible on floor, 
+            professional lighting, wide-angle view, technical drawing overlay"
+            </code>
+        </div>
+    </div>
+</body>
+</html>
+'''
 
-with col2:
-    if st.button("🔄 Réinitialiser", use_container_width=True):
-        st.session_state.results = None
-        st.session_state.calculated = False
-        st.rerun()
-
-# Affichage des résultats
-if st.session_state.calculated and st.session_state.results:
-    results = st.session_state.results
+def generate_warehouse_schema(largeur_entrepot=50, longueur_entrepot=30, 
+                             largeur_rack=2, longueur_rack=5, 
+                             hauteur_rack=4, nb_rangees=4, 
+                             largeur_allee=4, config_type='simple'):
+    """Génère un schéma d'entrepôt 2D avec mesures"""
+    fig, ax = plt.subplots(figsize=(14, 10))
     
-    # Métriques principales
-    st.markdown("## 📊 Résultats de la configuration")
+    # Fond de l'entrepôt
+    ax.add_patch(patches.Rectangle((0, 0), largeur_entrepot, longueur_entrepot,
+                                   linewidth=3, edgecolor='#2c3e50', facecolor='#ecf0f1', 
+                                   alpha=0.3, label='Limites entrepôt'))
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Calcul de la configuration
+    nb_racks_total = 0
     
-    with col1:
-        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-        st.metric("🏢 Surface totale", f"{results['surface_totale']:,.0f} m²")
-        st.metric("📦 Surface racks", f"{results['surface_racks_totale']:,.0f} m²")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-        st.metric("🔢 Nombre de racks", f"{results['nb_racks']:,}")
-        st.metric("📐 Disposition", f"{results['racks_longueur']} × {results['racks_largeur']}")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-        st.metric("📈 Capacité totale", f"{results['capacite_totale']:,} palettes")
-        st.metric("🔄 Étages/rack", f"{etages}")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-        st.metric("📊 Taux utilisation", f"{results['taux_utilisation']:.1f}%")
-        st.metric("⭐ Score", f"{results['score']:.1f}/100")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Onglets
-    tab1, tab2, tab3 = st.tabs(["📐 Visualisation", "📋 Détails", "💾 Export"])
-    
-    with tab1:
-        # Vue de dessus
-        st.subheader("📐 Vue de dessus")
-        
-        fig_plan = go.Figure()
-        
-        # Entrepôt
-        fig_plan.add_shape(
-            type="rect",
-            x0=0, y0=0, x1=longueur, y1=largeur,
-            line=dict(color="black", width=3),
-            fillcolor="lightgray",
-            opacity=0.2
-        )
-        
-        # Racks
-        for i in range(min(results['racks_longueur'], 10)):
-            for j in range(min(results['racks_largeur'], 6)):
-                x_pos = i * (rack_longueur + 0.5) + 2
-                y_pos = j * (rack_largeur + 0.5) + 2
+    if config_type == 'simple':
+        # Configuration simple : 2 rangées de chaque côté de l'allée
+        rack_positions = []
+        for r in range(nb_rangees):
+            # Racks gauche
+            for c in range(2):
+                x = 2 + c * (largeur_rack + 1)
+                y = 2 + r * (longueur_rack + 2)
+                rack_positions.append((x, y))
+                nb_racks_total += 1
+            
+            # Racks droite
+            for c in range(2):
+                x = 2 + 2*(largeur_rack + 1) + largeur_allee + c * (largeur_rack + 1)
+                y = 2 + r * (longueur_rack + 2)
+                rack_positions.append((x, y))
+                nb_racks_total += 1
                 
-                fig_plan.add_shape(
-                    type="rect",
-                    x0=x_pos, y0=y_pos,
-                    x1=x_pos + rack_longueur, y1=y_pos + rack_largeur,
-                    line=dict(color="orange", width=2),
-                    fillcolor="orange",
-                    opacity=0.6
-                )
+    elif config_type == 'double':
+        # Configuration double : 4 rangées de chaque côté
+        rack_positions = []
+        for r in range(nb_rangees):
+            for side in [0, 1]:  # Gauche et droite
+                base_x = 2 if side == 0 else 2 + 4*(largeur_rack + 1) + largeur_allee
+                for c in range(4):
+                    x = base_x + c * (largeur_rack + 1)
+                    y = 2 + r * (longueur_rack + 2)
+                    rack_positions.append((x, y))
+                    nb_racks_total += 1
+                    
+    else:  # compact
+        # Configuration compacte : maximiser l'espace
+        rack_positions = []
+        max_racks_x = int((largeur_entrepot - largeur_allee - 4) / (largeur_rack + 1))
+        racks_per_side = max_racks_x // 2
         
-        fig_plan.update_layout(
-            xaxis_range=[0, longueur + 5],
-            yaxis_range=[0, largeur + 5],
-            height=500,
-            showlegend=False,
-            plot_bgcolor='white'
+        for r in range(nb_rangees):
+            for side in [0, 1]:
+                base_x = 2 if side == 0 else 2 + racks_per_side*(largeur_rack + 1) + largeur_allee
+                for c in range(racks_per_side):
+                    x = base_x + c * (largeur_rack + 1)
+                    y = 2 + r * (longueur_rack + 2)
+                    rack_positions.append((x, y))
+                    nb_racks_total += 1
+    
+    # Dessiner les racks
+    for idx, (x, y) in enumerate(rack_positions):
+        color = '#3498db' if idx % 2 == 0 else '#2980b9'
+        ax.add_patch(patches.Rectangle((x, y), largeur_rack, longueur_rack,
+                                       facecolor=color, edgecolor='#1a5276', 
+                                       linewidth=1.5, alpha=0.8,
+                                       label='Rack' if idx == 0 else ""))
+        
+        # Texte avec dimensions
+        ax.text(x + largeur_rack/2, y + longueur_rack/2, 
+                f'{largeur_rack}m\n×\n{longueur_rack}m',
+                ha='center', va='center', fontsize=7, color='white', fontweight='bold')
+        
+        # Numéro du rack
+        ax.text(x + largeur_rack/2, y - 0.5, f'R{idx+1:02d}',
+                ha='center', va='center', fontsize=6, color='#2c3e50')
+    
+    # Allées
+    ax.add_patch(patches.Rectangle((2 + nb_racks_total//(nb_rangees*2)*(largeur_rack+1), 0),
+                                   largeur_allee, longueur_entrepot,
+                                   facecolor='#bdc3c7', alpha=0.5, 
+                                   edgecolor='#7f8c8d', linewidth=2,
+                                   label='Allée de circulation'))
+    
+    # Portes
+    door_width = 6
+    ax.add_patch(patches.Rectangle((largeur_entrepot/2 - door_width/2, -0.5),
+                                   door_width, 1,
+                                   facecolor='#e74c3c', alpha=0.7,
+                                   label='Entrée principale'))
+    
+    # Ajouter les mesures
+    # Mesure de l'allée
+    ax.annotate(f'{largeur_allee}m', 
+                xy=(2 + nb_racks_total//(nb_rangees*2)*(largeur_rack+1) + largeur_allee/2, longueur_entrepot-2),
+                xytext=(0, 0), textcoords='offset points',
+                ha='center', va='center', fontsize=10, fontweight='bold',
+                color='#c0392b',
+                arrowprops=dict(arrowstyle='<->', color='#c0392b', lw=2))
+    
+    # Mesure totale
+    ax.annotate(f'{largeur_entrepot}m', 
+                xy=(largeur_entrepot/2, -3),
+                xytext=(0, 0), textcoords='offset points',
+                ha='center', va='center', fontsize=12, fontweight='bold',
+                color='#2c3e50',
+                arrowprops=dict(arrowstyle='<->', color='#2c3e50', lw=3))
+    
+    ax.annotate(f'{longueur_entrepot}m', 
+                xy=(-3, longueur_entrepot/2),
+                xytext=(0, 0), textcoords='offset points',
+                ha='center', va='center', fontsize=12, fontweight='bold',
+                color='#2c3e50', rotation=90,
+                arrowprops=dict(arrowstyle='<->', color='#2c3e50', lw=3))
+    
+    # Configuration du graphique
+    ax.set_xlim(-5, largeur_entrepot + 5)
+    ax.set_ylim(-5, longueur_entrepot + 5)
+    ax.set_aspect('equal')
+    ax.set_xlabel('Largeur (mètres)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Longueur (mètres)', fontsize=12, fontweight='bold')
+    ax.set_title(f'Configuration d\'entrepôt - {nb_racks_total} racks', 
+                fontsize=16, fontweight='bold', pad=20)
+    
+    # Légende
+    handles, labels = ax.get_legend_handles_labels()
+    unique_labels = []
+    unique_handles = []
+    for handle, label in zip(handles, labels):
+        if label not in unique_labels:
+            unique_labels.append(label)
+            unique_handles.append(handle)
+    ax.legend(unique_handles, unique_labels, loc='upper right', fontsize=10)
+    
+    ax.grid(True, linestyle='--', alpha=0.3, color='#7f8c8d')
+    
+    plt.tight_layout()
+    
+    # Convertir en base64 pour affichage HTML
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+    buffer.seek(0)
+    image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    plt.close()
+    
+    return image_base64, nb_racks_total
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    # Valeurs par défaut
+    params = {
+        'largeur_entrepot': 50,
+        'longueur_entrepot': 30,
+        'largeur_rack': 2,
+        'longueur_rack': 5,
+        'hauteur_rack': 4,
+        'nb_rangees': 4,
+        'largeur_allee': 4,
+        'config_type': 'simple',
+        'image_data': None,
+        'nb_racks_total': 0,
+        'surface_stockage': 0
+    }
+    
+    if request.method == 'POST':
+        # Récupérer les paramètres du formulaire
+        for key in params:
+            if key != 'image_data' and key != 'nb_racks_total' and key != 'surface_stockage':
+                if key in ['largeur_entrepot', 'longueur_entrepot', 'nb_rangees']:
+                    params[key] = int(request.form.get(key, params[key]))
+                elif key == 'config_type':
+                    params[key] = request.form.get(key, params[key])
+                else:
+                    params[key] = float(request.form.get(key, params[key]))
+        
+        # Générer l'image
+        image_data, nb_racks_total = generate_warehouse_schema(
+            largeur_entrepot=params['largeur_entrepot'],
+            longueur_entrepot=params['longueur_entrepot'],
+            largeur_rack=params['largeur_rack'],
+            longueur_rack=params['longueur_rack'],
+            hauteur_rack=params['hauteur_rack'],
+            nb_rangees=params['nb_rangees'],
+            largeur_allee=params['largeur_allee'],
+            config_type=params['config_type']
         )
         
-        st.plotly_chart(fig_plan, use_container_width=True)
-        
-        # Graphique de répartition
-        st.subheader("📊 Répartition de l'espace")
-        
-        fig_pie = go.Figure(data=[go.Pie(
-            labels=['Racks', 'Allées', 'Espace libre'],
-            values=[results['surface_racks_totale'], 
-                   results['surface_all'] * 0.7,
-                   results['surface_all'] * 0.3],
-            hole=0.4,
-            marker_colors=['orange', 'lightblue', 'lightgray']
-        )])
-        
-        st.plotly_chart(fig_pie, use_container_width=True)
+        params['image_data'] = image_data
+        params['nb_racks_total'] = nb_racks_total
+        params['surface_stockage'] = nb_racks_total * params['largeur_rack'] * params['longueur_rack']
     
-    with tab2:
-        # Tableau détaillé
-        st.subheader("📋 Détails techniques")
-        
-        details = pd.DataFrame({
-            'Paramètre': [
-                'Dimensions entrepôt',
-                'Surface totale',
-                'Volume total',
-                'Dimensions rack',
-                'Hauteur totale rack',
-                'Conformité hauteur',
-                'Nombre total racks',
-                'Disposition racks',
-                'Étages par rack',
-                'Capacité par rack',
-                'Capacité totale',
-                'Type chariot',
-                'Largeur allée',
-                'Conformité allée',
-                'Taux d\'utilisation',
-                'Surface racks',
-                'Surface allées'
-            ],
-            'Valeur': [
-                f"{longueur}m × {largeur}m × {hauteur}m",
-                f"{results['surface_totale']:,.0f} m²",
-                f"{results['volume_total']:,.0f} m³",
-                f"{rack_longueur}m × {rack_largeur}m",
-                f"{results['hauteur_totale_rack']:.2f} m",
-                '✅ Conforme' if results['conforme_hauteur'] else '❌ Non conforme',
-                f"{results['nb_racks']:,}",
-                f"{results['racks_longueur']} × {results['racks_largeur']}",
-                f"{etages}",
-                f"{results['capacite_par_rack']} palettes",
-                f"{results['capacite_totale']:,} palettes",
-                type_chariot,
-                f"{allee} m",
-                '✅ Conforme' if allee >= results['specs_chariot']['allee_min'] else '❌ Non conforme',
-                f"{results['taux_utilisation']:.1f}%",
-                f"{results['surface_racks_totale']:,.0f} m²",
-                f"{results['surface_all']:,.0f} m²"
-            ]
-        })
-        
-        st.dataframe(details, use_container_width=True, hide_index=True)
-        
-        # Alertes
-        st.subheader("⚠️ Vérifications")
-        
-        if not results['conforme_hauteur']:
-            st.error(f"**Hauteur non conforme:** Les racks ({results['hauteur_totale_rack']:.2f}m) "
-                    f"dépassent la hauteur disponible ({hauteur}m)")
-        
-        if allee < results['specs_chariot']['allee_min']:
-            st.error(f"**Allée trop étroite:** {allee}m < minimum {results['specs_chariot']['allee_min']}m "
-                    f"pour {type_chariot}")
-        
-        if results['taux_utilisation'] < 60:
-            st.warning(f"**Faible utilisation:** {results['taux_utilisation']:.1f}% < optimal 70%")
-        elif results['taux_utilisation'] > 85:
-            st.warning(f"**Utilisation très élevée:** {results['taux_utilisation']:.1f}% > maximum conseillé 85%")
+    return render_template_string(HTML_TEMPLATE, **params)
+
+@app.route('/download')
+def download():
+    # Régénérer l'image pour le téléchargement (simplifié)
+    buffer = BytesIO()
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.text(0.5, 0.5, "Schéma d'entrepôt - Export PNG\n(La même image que vue sur la page)",
+            ha='center', va='center', transform=ax.transAxes, fontsize=14)
+    ax.axis('off')
+    plt.savefig(buffer, format='png', dpi=300)
+    buffer.seek(0)
+    plt.close()
     
-    with tab3:
-        # Export
-        st.subheader("💾 Exporter les données")
-        
-        # Rapport TXT
-        rapport = f"""CONFIGURATION D'ENTREPÔT
-{'='*50}
+    return send_file(buffer, mimetype='image/png', 
+                     as_attachment=True, 
+                     download_name='schema_entrepot.png')
 
-ENTREPÔT:
-  Dimensions: {longueur}m × {largeur}m × {hauteur}m
-  Surface: {results['surface_totale']:,.0f} m²
-  Volume: {results['volume_total']:,.0f} m³
-
-RACKS:
-  Dimensions: {rack_longueur}m × {rack_largeur}m
-  Hauteur: {results['hauteur_totale_rack']:.2f}m ({etages} étages)
-  Nombre: {results['nb_racks']:,}
-  Disposition: {results['racks_longueur']} × {results['racks_largeur']}
-  Capacité: {results['capacite_totale']:,} palettes
-
-CHARIOTS:
-  Type: {type_chariot}
-  Allée: {allee}m
-  Conformité: {'CONFORME' if allee >= results['specs_chariot']['allee_min'] else 'NON CONFORME'}
-
-PERFORMANCES:
-  Taux utilisation: {results['taux_utilisation']:.1f}%
-  Score: {results['score']:.1f}/100
-  Conformité hauteur: {'CONFORME' if results['conforme_hauteur'] else 'NON CONFORME'}
-
-Date: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}
-{'='*50}
-"""
-        
-        st.download_button(
-            label="📄 Télécharger le rapport (TXT)",
-            data=rapport,
-            file_name=f"config_entrepot_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.txt",
-            mime="text/plain"
-        )
-        
-        # Données CSV
-        df_export = pd.DataFrame({
-            'Paramètre': ['Longueur', 'Largeur', 'Hauteur', 'Surface', 'Nombre_racks', 
-                         'Capacite_totale', 'Taux_utilisation', 'Type_chariot', 'Largeur_allee'],
-            'Valeur': [longueur, largeur, hauteur, results['surface_totale'], 
-                      results['nb_racks'], results['capacite_totale'], 
-                      results['taux_utilisation'], type_chariot, allee],
-            'Unité': ['m', 'm', 'm', 'm²', 'unités', 'palettes', '%', 'type', 'm']
-        })
-        
-        st.download_button(
-            label="📊 Télécharger les données (CSV)",
-            data=df_export.to_csv(index=False),
-            file_name=f"donnees_entrepot_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv"
-        )
-
-# Instructions
-with st.expander("ℹ️ Comment utiliser"):
-    st.markdown("""
-    ### Guide d'utilisation :
+@app.route('/download_svg')
+def download_svg():
+    # Créer un SVG simple
+    buffer = BytesIO()
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.text(0.5, 0.5, "Schéma d'entrepôt - Export SVG\n(Ouvrir avec Inkscape/AutoCAD)",
+            ha='center', va='center', transform=ax.transAxes, fontsize=14)
+    ax.axis('off')
+    plt.savefig(buffer, format='svg')
+    buffer.seek(0)
+    plt.close()
     
-    1. **Configurez les paramètres** dans la sidebar
-    2. **Cliquez sur 'Calculer la configuration'**
-    3. **Consultez les résultats** dans les onglets
-    4. **Exportez** le rapport si nécessaire
-    
-    ### Normes recommandées :
-    - Allée minimum : **3.0m** pour tout chariot
-    - Marge hauteur : **+0.5m** au-dessus des racks
-    - Taux utilisation optimal : **70-80%**
-    - Espacement entre racks : **20cm minimum**
-    """)
+    return send_file(buffer, mimetype='image/svg+xml', 
+                     as_attachment=True, 
+                     download_name='schema_entrepot.svg')
 
-# Pied de page
-st.divider()
-st.caption("🏭 Warehouse Configuration Optimizer | Version stable | Streamlit Cloud Compatible")
-
-# Affichage des paramètres actuels dans la sidebar
-with st.sidebar:
-    st.divider()
-    st.markdown("**📋 Paramètres actuels :**")
-    st.write(f"Entrepôt : {longueur}m × {largeur}m × {hauteur}m")
-    st.write(f"Racks : {rack_longueur}m × {rack_largeur}m")
-    st.write(f"Allée : {allee}m ({type_chariot})")
+if __name__ == '__main__':
+    print("🚀 Application démarrée !")
+    print("🌐 Ouvrez votre navigateur et allez sur : http://localhost:5000")
+    print("📦 Configurez votre entrepôt et générez le schéma !")
+    app.run(debug=True, host='0.0.0.0', port=5000)
